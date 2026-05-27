@@ -1,0 +1,32 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: lawschedule
+      POSTGRES_USER: lawuser
+      POSTGRES_PASSWORD: lawpass
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgresql://lawuser:lawpass@db:5432/lawschedule
+      JWT_SECRET: ${JWT_SECRET:-cambia_este_secreto_en_produccion}
+      JWT_EXPIRES_IN: 30d
+      PORT: 3000
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    volumes:
+      - uploads_data:/app/src/uploads
+
+volumes:
+  pg_data:
+  uploads_data:

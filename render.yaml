@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: lawschedule-api
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node src/server.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_EXPIRES_IN
+        value: 30d
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: lawschedule-db
+          property: connectionString
+
+databases:
+  - name: lawschedule-db
+    plan: free
