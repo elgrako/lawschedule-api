@@ -2,7 +2,6 @@
   "name": "lawschedule-api",
   "version": "1.0.0",
   "main": "src/server.js",
-  "packageManager": "pnpm@9.15.4",
   "engines": {
     "node": ">=20"
   },
