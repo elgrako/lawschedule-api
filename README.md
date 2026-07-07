@@ -1,70 +1,25 @@
 # LawSchedule API
 
-Backend REST para la app Android LawSchedule. Node.js + Express + PostgreSQL.
+Backend REST de **LawSchedule**, una app para que abogados del turno de oficio gestionen sus guardias, expedientes y documentación asociada. Construido con Node.js, Express y PostgreSQL.
 
-## Deploy en Render (5 minutos)
+## Funcionalidades
 
-### 1. Subir a GitHub
+- Registro e inicio de sesión con JWT.
+- Gestión de guardias: alta, edición, borrado y consulta filtrada por usuario.
+- Seguimiento del estado de cada guardia (situación, apelaciones, recursos y recursos extraordinarios).
+- Gestión de registros/expedientes, incluyendo subida y descarga de documentos (`multipart/form-data`).
+- Endpoint de salud (`/health`) para monitorización externa.
 
-```bash
-cd backend
-git init
-git add .
-git commit -m "Initial commit"
-# Crear repo en github.com/new (nombre: lawschedule-api, privado)
-git remote add origin https://github.com/TU_USUARIO/lawschedule-api.git
-git push -u origin main
-```
+## Tecnologías
 
-### 2. Deploy en Render
+- Node.js + Express.
+- PostgreSQL como base de datos.
+- `jsonwebtoken` + `bcrypt` para autenticación.
+- `helmet` y `express-rate-limit` para cabeceras de seguridad y límite de peticiones (más estricto en `/auth`).
+- `multer` para la subida de ficheros.
+- Docker y `docker-compose` para desarrollo y despliegue local.
 
-1. Ir a [render.com](https://render.com) → **New** → **Blueprint**
-2. Conectar tu repo GitHub
-3. Render detecta `render.yaml` y crea automáticamente:
-   - Web Service (Node.js)
-   - PostgreSQL database
-   - `JWT_SECRET` generado automáticamente
-4. Click **Apply** → esperar ~3 min
-5. Tu API queda en: `https://lawschedule-api.onrender.com`
-
-> Las migraciones corren automáticamente al arrancar. No hay que ejecutar nada manualmente.
-
-### 3. Configurar Android
-
-En `gradle.properties` del proyecto Android:
-```properties
-PIN_HOST=lawschedule-api.onrender.com
-```
-
-En `NetworkModule.java`, la base URL ya usa `BuildConfig.API_HOST` dinámicamente.
-
----
-
-## Evitar sleep en Render (free tier)
-
-Render free duerme tras 15 min de inactividad. Usar **UptimeRobot**:
-
-1. Ir a [uptimerobot.com](https://uptimerobot.com) → crear cuenta gratis
-2. **Add New Monitor**:
-   - Monitor Type: **HTTP(s)**
-   - Friendly Name: `LawSchedule API`
-   - URL: `https://lawschedule-api.onrender.com/health`
-   - Monitoring Interval: **5 minutes**
-3. Guardar → UptimeRobot pinga `/health` cada 5 min, Render nunca duerme
-
----
-
-## Desarrollo local
-
-```bash
-cp .env.example .env
-# Editar .env con tu DATABASE_URL local y JWT_SECRET
-
-npm install
-npm run dev
-```
-
-## Endpoints
+## Endpoints principales
 
 ```
 POST   /auth/register
@@ -74,7 +29,6 @@ GET    /v1/registros?user={id}
 POST   /v1/registros
 PUT    /v1/registros/:id
 DELETE /v1/registros/:id
-
 GET    /v1/registros/:id/documentos
 POST   /v1/registros/:id/documentos        (multipart/form-data, campo: file)
 GET    /v1/registros/:id/documentos/:docId/file
@@ -84,11 +38,43 @@ GET    /v1/guardias?user={id}
 POST   /v1/guardias
 PUT    /v1/guardias/:id
 DELETE /v1/guardias/:id
-
 GET/POST/PUT/DELETE /v1/guardias/:id/situacion
 GET/POST/PUT/DELETE /v1/guardias/:id/apelaciones
 GET/POST/PUT/DELETE /v1/guardias/:id/recurso
 GET/POST/PUT/DELETE /v1/guardias/:id/recurso_extra
 
 GET    /health
+```
+
+Todas las rutas salvo `/auth/*` y `/health` requieren cabecera `Authorization: Bearer <token>`.
+
+## Desarrollo local
+
+```bash
+cp .env.example .env
+# Completar DATABASE_URL y JWT_SECRET en .env
+
+npm install
+npm run dev
+```
+
+O con Docker:
+
+```bash
+docker compose up
+```
+
+## Despliegue
+
+Incluye `render.yaml` para desplegar en [Render](https://render.com) como Blueprint (crea automáticamente el servicio web, la base de datos PostgreSQL y el `JWT_SECRET`). Las migraciones (`src/db/migrate.js`) se ejecutan automáticamente al arrancar. Más detalle en `DEPLOY.md`.
+
+## Estructura
+
+```
+src/
+├── app.js              # Configuración de Express (middlewares, rutas)
+├── server.js            # Arranque del servidor
+├── db/                   # Conexión, esquema y migraciones
+├── middleware/auth.js    # Verificación de JWT
+└── routes/               # auth, registros, guardias, documentos
 ```
