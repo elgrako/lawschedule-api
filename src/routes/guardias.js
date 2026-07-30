@@ -1,5 +1,13 @@
 const router = require('express').Router();
 const pool   = require('../db/pool');
+const { ownsGuardia } = require('../middleware/ownership');
+const V = require('../middleware/validate');
+const L = V.LIMITS;
+
+// OWASP API1 (BOLA): toda subruta /:guardiaId/... verifica propiedad del padre.
+// Sin esto, cualquier usuario autenticado podria leer/editar situaciones,
+// apelaciones y recursos de guardias ajenas cambiando el id en la URL.
+router.param('guardiaId', (req, res, next) => ownsGuardia(req, res, next));
 
 function mapGuardia(r) {
     return {
@@ -56,7 +64,7 @@ router.post('/', async (req, res) => {
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
             [b.nombreAsistido, b.diaActuacion, b.porJuzgado||false, b.cobrado||false,
              b.juzgado, b.telefonoJuzgado, b.agenteJudicial, b.juez,
-             b.observacionesAsistido, req.userId]
+             V.str(b.observacionesAsistido, L.observacionesAsistido), req.userId]
         );
         res.status(201).json(mapGuardia(rows[0]));
     } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
