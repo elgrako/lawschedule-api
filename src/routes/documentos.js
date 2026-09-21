@@ -4,6 +4,7 @@ const path   = require('path');
 const fs     = require('fs');
 const crypto = require('crypto');
 const pool   = require('../db/pool');
+const V      = require('../middleware/validate');
 
 const uploadDir = process.env.UPLOAD_DIR || './src/uploads';
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
@@ -90,7 +91,6 @@ router.post('/', upload.single('file'), async (req, res) => {
         await pool.query('UPDATE documentos_registro SET url_remota=$1 WHERE id=$2', [urlRemota, doc.id]);
         const ext = safeExt(req.file.originalname, req.file.mimetype) || '.bin';
         fs.renameSync(req.file.path, path.join(uploadDir, String(doc.id) + ext));
-        await pool.query('UPDATE documentos_registro SET url_remota=$1 WHERE id=$2', [urlRemota, doc.id]);
         doc.url_remota = urlRemota;
         res.status(201).json(mapDoc(doc, base));
     } catch (err) {
@@ -100,6 +100,7 @@ router.post('/', upload.single('file'), async (req, res) => {
 });
 
 router.get('/:docId/file', async (req, res) => {
+    if (!V.id(req.params.docId)) return res.status(400).json({ error: 'Identificador invalido' });
     try {
         const { rows } = await pool.query(
             'SELECT * FROM documentos_registro WHERE id=$1 AND registro_id=$2',
@@ -128,6 +129,7 @@ router.get('/:docId/file', async (req, res) => {
 });
 
 router.delete('/:docId', async (req, res) => {
+    if (!V.id(req.params.docId)) return res.status(400).json({ error: 'Identificador invalido' });
     try {
         const { rows } = await pool.query(
             'DELETE FROM documentos_registro WHERE id=$1 AND registro_id=$2 RETURNING *',
