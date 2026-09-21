@@ -13,10 +13,11 @@ const { isPositiveInt } = require('./ids');
 
 function ownsParent(table, paramName) {
     return async function (req, res, next) {
-        const id = req.params[paramName];
-        if (!isPositiveInt(id)) {
+        const raw = req.params[paramName];
+        if (!isPositiveInt(raw)) {
             return res.status(400).json({ error: 'Identificador invalido' });
         }
+        const id = Number(raw);
         try {
             const { rows } = await pool.query(
                 `SELECT 1 FROM ${table} WHERE id = $1 AND usuario_id = $2 LIMIT 1`,

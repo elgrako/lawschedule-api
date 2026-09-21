@@ -7,7 +7,8 @@ const LIMITS = {
     nombre: 200, dni: 20, nExpediente: 60, email: 120, telefono: 20,
     nTalon: 60, comentarios: 5000, estado: 30, juzgado: 200,
     telefonoJuzgado: 20, agenteJudicial: 200, juez: 200,
-    nombreAsistido: 200, observacionesAsistido: 5000, observaciones: 5000
+    nombreAsistido: 200, observacionesAsistido: 5000, observaciones: 5000,
+    direccion: 300, notas: 2000
 };
 
 const ESTADOS = ['PENDIENTE', 'EN_CURSO', 'POR_COMPLETAR', 'CON_DEFECTOS', 'TERMINADO'];

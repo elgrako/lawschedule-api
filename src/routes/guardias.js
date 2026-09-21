@@ -12,14 +12,9 @@ router.param('guardiaId', (req, res, next) => ownsGuardia(req, res, next));
 function mapGuardia(r) {
     return {
         id:                     Number(r.id),
+        diaGuardiaId:           r.dia_guardia_id != null ? Number(r.dia_guardia_id) : null,
         nombreAsistido:         r.nombre_asistido,
-        diaActuacion:           r.dia_actuacion,
-        porJuzgado:             r.por_juzgado,
         cobrado:                r.cobrado,
-        juzgado:                r.juzgado,
-        telefonoJuzgado:        r.telefono_juzgado,
-        agenteJudicial:         r.agente_judicial,
-        juez:                   r.juez,
         observacionesAsistido:  r.observaciones_asistido,
         usuario_id:             Number(r.usuario_id)
     };
@@ -50,20 +45,39 @@ router.get('/', async (req, res) => {
     const userId = req.query.user ? Number(req.query.user) : req.userId;
     if (Number(userId) !== Number(req.userId)) return res.status(403).json({ error: 'Forbidden' });
     try {
-        const { rows } = await pool.query('SELECT * FROM guardias WHERE usuario_id=$1 ORDER BY dia_actuacion DESC', [userId]);
+        const { rows } = await pool.query(
+            `SELECT g.* FROM guardias g
+             LEFT JOIN dias_guardia dg ON g.dia_guardia_id = dg.id
+             WHERE g.usuario_id=$1
+             ORDER BY dg.dia_actuacion DESC NULLS LAST, g.id DESC`,
+            [userId]
+        );
         res.json(rows.map(mapGuardia));
     } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
 });
 
+// OWASP API1 (BOLA): diaGuardiaId llega en el body, no en la URL, asi que no puede
+// pasar por router.param como :guardiaId. Se verifica pertenencia aqui mismo antes
+// de crear/actualizar el asistido.
+async function assertOwnsDiaGuardia(diaGuardiaId, userId) {
+    const { rows } = await pool.query(
+        'SELECT 1 FROM dias_guardia WHERE id=$1 AND usuario_id=$2 LIMIT 1', [diaGuardiaId, userId]
+    );
+    return rows.length > 0;
+}
+
 router.post('/', async (req, res) => {
-    const b = req.body;
+    const b = req.body || {};
+    const diaGuardiaId = V.id(b.diaGuardiaId);
+    if (!diaGuardiaId) return res.status(400).json({ error: 'diaGuardiaId invalido' });
     try {
+        if (!(await assertOwnsDiaGuardia(diaGuardiaId, req.userId))) {
+            return res.status(404).json({ error: 'Dia de guardia no encontrado' });
+        }
         const { rows } = await pool.query(
-            `INSERT INTO guardias (nombre_asistido, dia_actuacion, por_juzgado, cobrado,
-             juzgado, telefono_juzgado, agente_judicial, juez, observaciones_asistido, usuario_id)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-            [b.nombreAsistido, b.diaActuacion, b.porJuzgado||false, b.cobrado||false,
-             b.juzgado, b.telefonoJuzgado, b.agenteJudicial, b.juez,
+            `INSERT INTO guardias (dia_guardia_id, nombre_asistido, cobrado, observaciones_asistido, usuario_id)
+             VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+            [diaGuardiaId, V.str(b.nombreAsistido, L.nombreAsistido), V.bool(b.cobrado),
              V.str(b.observacionesAsistido, L.observacionesAsistido), req.userId]
         );
         res.status(201).json(mapGuardia(rows[0]));
@@ -71,16 +85,20 @@ router.post('/', async (req, res) => {
 });
 
 router.put('/:id', async (req, res) => {
-    const b = req.body;
+    const b = req.body || {};
+    if (!V.id(req.params.id)) return res.status(400).json({ error: 'Identificador invalido' });
+    const diaGuardiaId = V.id(b.diaGuardiaId);
+    if (!diaGuardiaId) return res.status(400).json({ error: 'diaGuardiaId invalido' });
     try {
+        if (!(await assertOwnsDiaGuardia(diaGuardiaId, req.userId))) {
+            return res.status(404).json({ error: 'Dia de guardia no encontrado' });
+        }
         const { rows } = await pool.query(
-            `UPDATE guardias SET nombre_asistido=$1, dia_actuacion=$2, por_juzgado=$3, cobrado=$4,
-             juzgado=$5, telefono_juzgado=$6, agente_judicial=$7, juez=$8,
-             observaciones_asistido=$9, updated_at=EXTRACT(EPOCH FROM NOW())*1000
-             WHERE id=$10 AND usuario_id=$11 RETURNING *`,
-            [b.nombreAsistido, b.diaActuacion, b.porJuzgado||false, b.cobrado||false,
-             b.juzgado, b.telefonoJuzgado, b.agenteJudicial, b.juez,
-             b.observacionesAsistido, req.params.id, req.userId]
+            `UPDATE guardias SET dia_guardia_id=$1, nombre_asistido=$2, cobrado=$3,
+             observaciones_asistido=$4, updated_at=EXTRACT(EPOCH FROM NOW())*1000
+             WHERE id=$5 AND usuario_id=$6 RETURNING *`,
+            [diaGuardiaId, V.str(b.nombreAsistido, L.nombreAsistido), V.bool(b.cobrado),
+             V.str(b.observacionesAsistido, L.observacionesAsistido), req.params.id, req.userId]
         );
         if (!rows.length) return res.status(404).json({ error: 'No encontrado' });
         res.json(mapGuardia(rows[0]));
@@ -88,6 +106,7 @@ router.put('/:id', async (req, res) => {
 });
 
 router.delete('/:id', async (req, res) => {
+    if (!V.id(req.params.id)) return res.status(400).json({ error: 'Identificador invalido' });
     try {
         await pool.query('DELETE FROM guardias WHERE id=$1 AND usuario_id=$2', [req.params.id, req.userId]);
         res.status(204).send();
@@ -104,27 +123,28 @@ router.get('/:guardiaId/situacion', async (req, res) => {
 });
 
 router.post('/:guardiaId/situacion', async (req, res) => {
-    const b = req.body;
+    const b = req.body || {};
     try {
         const { rows } = await pool.query(
             `INSERT INTO situaciones_guardia (guardia_id, comentarios, n_talon, euros, presentado, validado, pagado)
              VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-            [req.params.guardiaId, b.comentarios, b.nTalon||b.n_talon, b.euros||0,
-             b.presentado||false, b.validado||false, b.pagado||false]
+            [req.params.guardiaId, V.str(b.comentarios, L.comentarios), V.str(b.nTalon || b.n_talon, L.nTalon),
+             V.num(b.euros, { max: 1e7 }), V.bool(b.presentado), V.bool(b.validado), V.bool(b.pagado)]
         );
         res.status(201).json(mapSituacion(rows[0]));
     } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.put('/:guardiaId/situacion/:id', async (req, res) => {
-    const b = req.body;
+    const b = req.body || {};
+    if (!V.id(req.params.id)) return res.status(400).json({ error: 'Identificador invalido' });
     try {
         const { rows } = await pool.query(
             `UPDATE situaciones_guardia SET comentarios=$1, n_talon=$2, euros=$3,
              presentado=$4, validado=$5, pagado=$6
              WHERE id=$7 AND guardia_id=$8 RETURNING *`,
-            [b.comentarios, b.nTalon||b.n_talon, b.euros||0,
-             b.presentado||false, b.validado||false, b.pagado||false,
+            [V.str(b.comentarios, L.comentarios), V.str(b.nTalon || b.n_talon, L.nTalon),
+             V.num(b.euros, { max: 1e7 }), V.bool(b.presentado), V.bool(b.validado), V.bool(b.pagado),
              req.params.id, req.params.guardiaId]
         );
         if (!rows.length) return res.status(404).json({ error: 'No encontrado' });
@@ -133,6 +153,7 @@ router.put('/:guardiaId/situacion/:id', async (req, res) => {
 });
 
 router.delete('/:guardiaId/situacion/:id', async (req, res) => {
+    if (!V.id(req.params.id)) return res.status(400).json({ error: 'Identificador invalido' });
     try {
         await pool.query('DELETE FROM situaciones_guardia WHERE id=$1 AND guardia_id=$2', [req.params.id, req.params.guardiaId]);
         res.status(204).send();
@@ -149,24 +170,27 @@ router.get('/:guardiaId/apelaciones', async (req, res) => {
 });
 
 router.post('/:guardiaId/apelaciones', async (req, res) => {
-    const b = req.body;
+    const b = req.body || {};
     try {
         const { rows } = await pool.query(
             `INSERT INTO apelaciones_guardia (guardia_id, n_expediente, admitido, presentado, sentencia)
              VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-            [req.params.guardiaId, b.nExpediente||b.n_expediente, b.admitido||false, b.presentado||false, b.sentencia||false]
+            [req.params.guardiaId, V.str(b.nExpediente || b.n_expediente, L.nExpediente),
+             V.bool(b.admitido), V.bool(b.presentado), V.bool(b.sentencia)]
         );
         res.status(201).json(mapApelacion(rows[0]));
     } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.put('/:guardiaId/apelaciones/:id', async (req, res) => {
-    const b = req.body;
+    const b = req.body || {};
+    if (!V.id(req.params.id)) return res.status(400).json({ error: 'Identificador invalido' });
     try {
         const { rows } = await pool.query(
             `UPDATE apelaciones_guardia SET n_expediente=$1, admitido=$2, presentado=$3, sentencia=$4
              WHERE id=$5 AND guardia_id=$6 RETURNING *`,
-            [b.nExpediente||b.n_expediente, b.admitido||false, b.presentado||false, b.sentencia||false,
+            [V.str(b.nExpediente || b.n_expediente, L.nExpediente),
+             V.bool(b.admitido), V.bool(b.presentado), V.bool(b.sentencia),
              req.params.id, req.params.guardiaId]
         );
         if (!rows.length) return res.status(404).json({ error: 'No encontrado' });
@@ -175,6 +199,7 @@ router.put('/:guardiaId/apelaciones/:id', async (req, res) => {
 });
 
 router.delete('/:guardiaId/apelaciones/:id', async (req, res) => {
+    if (!V.id(req.params.id)) return res.status(400).json({ error: 'Identificador invalido' });
     try {
         await pool.query('DELETE FROM apelaciones_guardia WHERE id=$1 AND guardia_id=$2', [req.params.id, req.params.guardiaId]);
         res.status(204).send();
@@ -191,22 +216,23 @@ router.get('/:guardiaId/recurso', async (req, res) => {
 });
 
 router.post('/:guardiaId/recurso', async (req, res) => {
-    const b = req.body;
+    const b = req.body || {};
     try {
         const { rows } = await pool.query(
             `INSERT INTO recursos_guardia (guardia_id, n_expediente, resuelto) VALUES ($1,$2,$3) RETURNING *`,
-            [req.params.guardiaId, b.nExpediente||b.n_expediente, b.resuelto||false]
+            [req.params.guardiaId, V.str(b.nExpediente || b.n_expediente, L.nExpediente), V.bool(b.resuelto)]
         );
         res.status(201).json(mapRecurso(rows[0]));
     } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.put('/:guardiaId/recurso/:id', async (req, res) => {
-    const b = req.body;
+    const b = req.body || {};
+    if (!V.id(req.params.id)) return res.status(400).json({ error: 'Identificador invalido' });
     try {
         const { rows } = await pool.query(
             `UPDATE recursos_guardia SET n_expediente=$1, resuelto=$2 WHERE id=$3 AND guardia_id=$4 RETURNING *`,
-            [b.nExpediente||b.n_expediente, b.resuelto||false, req.params.id, req.params.guardiaId]
+            [V.str(b.nExpediente || b.n_expediente, L.nExpediente), V.bool(b.resuelto), req.params.id, req.params.guardiaId]
         );
         if (!rows.length) return res.status(404).json({ error: 'No encontrado' });
         res.json(mapRecurso(rows[0]));
@@ -214,6 +240,7 @@ router.put('/:guardiaId/recurso/:id', async (req, res) => {
 });
 
 router.delete('/:guardiaId/recurso/:id', async (req, res) => {
+    if (!V.id(req.params.id)) return res.status(400).json({ error: 'Identificador invalido' });
     try {
         await pool.query('DELETE FROM recursos_guardia WHERE id=$1 AND guardia_id=$2', [req.params.id, req.params.guardiaId]);
         res.status(204).send();
@@ -230,22 +257,23 @@ router.get('/:guardiaId/recurso_extra', async (req, res) => {
 });
 
 router.post('/:guardiaId/recurso_extra', async (req, res) => {
-    const b = req.body;
+    const b = req.body || {};
     try {
         const { rows } = await pool.query(
             `INSERT INTO recursos_extra_ordinarios (guardia_id, n_expediente, admitido) VALUES ($1,$2,$3) RETURNING *`,
-            [req.params.guardiaId, b.nExpediente||b.n_expediente, b.admitido||false]
+            [req.params.guardiaId, V.str(b.nExpediente || b.n_expediente, L.nExpediente), V.bool(b.admitido)]
         );
         res.status(201).json(mapRecursoExtra(rows[0]));
     } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.put('/:guardiaId/recurso_extra/:id', async (req, res) => {
-    const b = req.body;
+    const b = req.body || {};
+    if (!V.id(req.params.id)) return res.status(400).json({ error: 'Identificador invalido' });
     try {
         const { rows } = await pool.query(
             `UPDATE recursos_extra_ordinarios SET n_expediente=$1, admitido=$2 WHERE id=$3 AND guardia_id=$4 RETURNING *`,
-            [b.nExpediente||b.n_expediente, b.admitido||false, req.params.id, req.params.guardiaId]
+            [V.str(b.nExpediente || b.n_expediente, L.nExpediente), V.bool(b.admitido), req.params.id, req.params.guardiaId]
         );
         if (!rows.length) return res.status(404).json({ error: 'No encontrado' });
         res.json(mapRecursoExtra(rows[0]));
@@ -253,6 +281,7 @@ router.put('/:guardiaId/recurso_extra/:id', async (req, res) => {
 });
 
 router.delete('/:guardiaId/recurso_extra/:id', async (req, res) => {
+    if (!V.id(req.params.id)) return res.status(400).json({ error: 'Identificador invalido' });
     try {
         await pool.query('DELETE FROM recursos_extra_ordinarios WHERE id=$1 AND guardia_id=$2', [req.params.id, req.params.guardiaId]);
         res.status(204).send();

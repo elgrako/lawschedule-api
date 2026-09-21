@@ -1,4 +1,12 @@
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
+
+// OID 1082 = date. Por defecto node-postgres construye un objeto Date en la
+// zona horaria LOCAL del proceso; al serializar a JSON eso puede desplazar el
+// dia +-1 segun el TZ del servidor (verificado: en un proceso con TZ=Europe/Madrid,
+// una guardia del "2026-04-01" volvia como "2026-03-31T22:00:00.000Z"). Para una
+// app que depende de fechas exactas de plazos judiciales eso es inaceptable.
+// Se fuerza a devolver el string "YYYY-MM-DD" tal cual lo guarda Postgres.
+types.setTypeParser(1082, val => val);
 
 // rejectUnauthorized:false desactiva la validacion del certificado del servidor
 // y permite MITM sobre la conexion a la BD. Se verifica el certificado salvo

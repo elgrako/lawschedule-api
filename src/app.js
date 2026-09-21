@@ -8,7 +8,9 @@ const { ownsRegistro } = require('./middleware/ownership');
 const authRoutes       = require('./routes/auth');
 const registrosRoutes  = require('./routes/registros');
 const guardiasRoutes   = require('./routes/guardias');
+const diasGuardiaRoutes = require('./routes/dias-guardia');
 const documentosRoutes = require('./routes/documentos');
+const clientesRoutes   = require('./routes/clientes');
 
 const app = express();
 
@@ -56,8 +58,10 @@ const authLimiter = rateLimit({
 });
 
 app.use('/auth', authLimiter, authRoutes);
+app.use('/v1/clientes', auth, clientesRoutes);
 app.use('/v1/registros', auth, registrosRoutes);
 app.use('/v1/registros/:registroId/documentos', auth, ownsRegistro, documentosRoutes);
+app.use('/v1/dias-guardia', auth, diasGuardiaRoutes);
 app.use('/v1/guardias', auth, guardiasRoutes);
 
 app.get('/health', (req, res) => res.json({ ok: true }));
