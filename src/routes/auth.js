@@ -3,7 +3,8 @@ const bcrypt  = require('bcrypt');
 const jwt     = require('jsonwebtoken');
 const crypto  = require('crypto');
 const pool    = require('../db/pool');
-const { JWT_ALG } = require('../middleware/auth');
+const auth    = require('../middleware/auth');
+const { JWT_ALG } = auth;
 
 const SALT_ROUNDS   = 12;
 const MAX_EMAIL_LEN = 120;
@@ -45,8 +46,8 @@ setInterval(() => {
     for (const [k, v] of failures) if (now - v.first > LOCK_WINDOW_MS) failures.delete(k);
 }, LOCK_WINDOW_MS).unref();
 
-function makeToken(userId) {
-    return jwt.sign({ sub: String(userId) }, process.env.JWT_SECRET, {
+function makeToken(userId, tokenVersion) {
+    return jwt.sign({ sub: String(userId), tokenVersion: tokenVersion || 0 }, process.env.JWT_SECRET, {
         algorithm: JWT_ALG,
         expiresIn: process.env.JWT_EXPIRES_IN || '7d',
         issuer:   'lawschedule-api',
@@ -94,7 +95,7 @@ router.post('/register', async (req, res) => {
             [mail, name, hash]
         );
         const user = rows[0];
-        res.status(201).json({ usuario: mapUser(user), token: makeToken(user.id) });
+        res.status(201).json({ usuario: mapUser(user), token: makeToken(user.id, user.token_version) });
     } catch (err) {
         if (err.code === '23505') return res.status(409).json({ error: 'Email ya registrado' });
         console.error('[auth/register]', err.code || err.name);
@@ -118,7 +119,7 @@ router.post('/login', async (req, res) => {
 
     try {
         const { rows } = await pool.query(
-            'SELECT id, email, nombre, password_hash, created_at FROM usuarios WHERE email = $1',
+            'SELECT id, email, nombre, password_hash, created_at, token_version FROM usuarios WHERE email = $1',
             [mail]
         );
         const user = rows[0];
@@ -135,9 +136,57 @@ router.post('/login', async (req, res) => {
             return res.status(401).json({ error: 'Credenciales incorrectas' });
         }
         clearFailures(mail);
-        res.json({ usuario: mapUser(user), token: makeToken(user.id) });
+        res.json({ usuario: mapUser(user), token: makeToken(user.id, user.token_version) });
     } catch (err) {
         console.error('[auth/login]', err.code || err.name);
+        res.status(500).json({ error: 'Error interno' });
+    }
+});
+
+router.post('/change-password', auth, async (req, res) => {
+    const { currentPassword, newPassword } = req.body || {};
+    if (typeof currentPassword !== 'string' || !currentPassword) {
+        return res.status(400).json({ error: 'Contrasena actual requerida' });
+    }
+    if (currentPassword.length > MAX_PASSWORD) {
+        return res.status(401).json({ error: 'Contrasena actual incorrecta' });
+    }
+    const pwdError = validPassword(newPassword);
+    if (pwdError) return res.status(400).json({ error: pwdError });
+
+    // Bloqueo por cuenta igual que /login (namespaced aparte: un JWT robado no
+    // debe poder fuerza-bruta la contrasena actual rotando de IP — antes de
+    // este fix solo el rate limit por IP de app.js cubria esta ruta).
+    const lockKey = 'cp:' + req.userId;
+    if (isLocked(lockKey)) {
+        return res.status(429).json({ error: 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.' });
+    }
+
+    try {
+        const { rows } = await pool.query(
+            'SELECT password_hash FROM usuarios WHERE id = $1',
+            [req.userId]
+        );
+        const user = rows[0];
+        if (!user) return res.status(401).json({ error: 'Contrasena actual incorrecta' });
+
+        const ok = await bcrypt.compare(currentPassword, user.password_hash);
+        if (!ok) {
+            recordFailure(lockKey);
+            return res.status(401).json({ error: 'Contrasena actual incorrecta' });
+        }
+        clearFailures(lockKey);
+
+        const hash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+        // token_version + 1 revoca de inmediato TODOS los tokens ya emitidos
+        // (robado o no) — se reemite uno nuevo aqui mismo para no cerrar esta sesion.
+        const { rows: updated } = await pool.query(
+            'UPDATE usuarios SET password_hash = $1, token_version = token_version + 1 WHERE id = $2 RETURNING token_version',
+            [hash, req.userId]
+        );
+        res.json({ ok: true, token: makeToken(req.userId, updated[0].token_version) });
+    } catch (err) {
+        console.error('[auth/change-password]', err.code || err.name);
         res.status(500).json({ error: 'Error interno' });
     }
 });

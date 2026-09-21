@@ -8,7 +8,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "db:migrate": "node src/db/migrate.js"
+    "db:migrate": "node src/db/migrate.js",
+    "test": "node test/security.test.js && node test/ownership.test.js && node test/routes.test.js && node test/registros.test.js && node test/guardias-subrecursos.test.js && node test/documentos.test.js && node test/auth.test.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

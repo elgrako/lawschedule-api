@@ -1,6 +1,7 @@
 /**
  * Tests de seguridad. Ejecutar: node test/security.test.js
- * No requiere BD: valida la logica pura de los middlewares de seguridad.
+ * No requiere BD real: la seccion de auth middleware mockea pool.query
+ * (mismo estilo que test/ownership.test.js), el resto es logica pura.
  */
 const assert = require('assert');
 const jwt    = require('jsonwebtoken');
@@ -13,6 +14,12 @@ function test(name, fn) {
     try { fn(); console.log('  OK   ' + name); pass++; }
     catch (e) { console.log('  FAIL ' + name + ' -> ' + e.message); fail++; }
 }
+async function testAsync(name, fn) {
+    try { await fn(); console.log('  OK   ' + name); pass++; }
+    catch (e) { console.log('  FAIL ' + name + ' -> ' + e.message); fail++; }
+}
+
+async function main() {
 
 console.log('\n== validate.js ==');
 const V = require('../src/middleware/validate');
@@ -55,16 +62,21 @@ test('bool no acepta strings arbitrarias', () => {
 });
 
 console.log('\n== auth middleware (JWT) ==');
+const pool = require('../src/db/pool');
 const auth = require('../src/middleware/auth');
 
-function runAuth(header) {
+// Por defecto el usuario 7 tiene token_version=0 en la "BD" mockeada: coincide
+// con los tokens de este archivo, que no llevan tokenVersion (payload.tokenVersion || 0).
+pool.query = async () => ({ rows: [{ token_version: 0 }] });
+
+async function runAuth(header) {
     const req = { headers: header ? { authorization: header } : {} };
     let status = null, body = null, nexted = false;
     const res = {
         status(c) { status = c; return this; },
         json(b) { body = b; return this; }
     };
-    auth(req, res, () => { nexted = true; });
+    await auth(req, res, () => { nexted = true; });
     return { req, status, body, nexted };
 }
 
@@ -72,39 +84,65 @@ const validToken = jwt.sign({ sub: '7' }, process.env.JWT_SECRET, {
     algorithm: 'HS256', expiresIn: '1h', issuer: 'lawschedule-api', audience: 'lawschedule-app'
 });
 
-test('token valido pasa y fija userId numerico', () => {
-    const r = runAuth('Bearer ' + validToken);
+await testAsync('token valido pasa y fija userId numerico', async () => {
+    const r = await runAuth('Bearer ' + validToken);
     assert.ok(r.nexted);
     assert.strictEqual(r.req.userId, 7);
 });
-test('sin cabecera -> 401', () => assert.strictEqual(runAuth(null).status, 401));
-test('esquema incorrecto -> 401', () => assert.strictEqual(runAuth('Basic abc').status, 401));
-test('token vacio -> 401', () => assert.strictEqual(runAuth('Bearer ').status, 401));
-test('firma invalida -> 401', () => {
+await testAsync('sin cabecera -> 401', async () => assert.strictEqual((await runAuth(null)).status, 401));
+await testAsync('esquema incorrecto -> 401', async () => assert.strictEqual((await runAuth('Basic abc')).status, 401));
+await testAsync('token vacio -> 401', async () => assert.strictEqual((await runAuth('Bearer ')).status, 401));
+await testAsync('firma invalida -> 401', async () => {
     const t = jwt.sign({ sub: '7' }, 'otro-secreto-distinto-pero-largo-1234', {
         issuer: 'lawschedule-api', audience: 'lawschedule-app' });
-    assert.strictEqual(runAuth('Bearer ' + t).status, 401);
+    assert.strictEqual((await runAuth('Bearer ' + t)).status, 401);
 });
-test('alg:none rechazado (confusion de algoritmo)', () => {
+await testAsync('alg:none rechazado (confusion de algoritmo)', async () => {
     const header = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url');
     const payload = Buffer.from(JSON.stringify({ sub: '7', iss: 'lawschedule-api', aud: 'lawschedule-app' })).toString('base64url');
-    assert.strictEqual(runAuth('Bearer ' + header + '.' + payload + '.').status, 401);
+    assert.strictEqual((await runAuth('Bearer ' + header + '.' + payload + '.')).status, 401);
 });
-test('token expirado -> 401', () => {
+await testAsync('token expirado -> 401', async () => {
     const t = jwt.sign({ sub: '7' }, process.env.JWT_SECRET, {
         algorithm: 'HS256', expiresIn: '-10s', issuer: 'lawschedule-api', audience: 'lawschedule-app' });
-    assert.strictEqual(runAuth('Bearer ' + t).status, 401);
+    assert.strictEqual((await runAuth('Bearer ' + t)).status, 401);
 });
-test('issuer/audience incorrectos -> 401', () => {
+await testAsync('issuer/audience incorrectos -> 401', async () => {
     const t = jwt.sign({ sub: '7' }, process.env.JWT_SECRET, {
         algorithm: 'HS256', expiresIn: '1h', issuer: 'otra-api', audience: 'otra-app' });
-    assert.strictEqual(runAuth('Bearer ' + t).status, 401);
+    assert.strictEqual((await runAuth('Bearer ' + t)).status, 401);
 });
-test('sub no numerico rechazado', () => {
+await testAsync('sub no numerico rechazado', async () => {
     const t = jwt.sign({ sub: 'admin' }, process.env.JWT_SECRET, {
         algorithm: 'HS256', expiresIn: '1h', issuer: 'lawschedule-api', audience: 'lawschedule-app' });
-    assert.strictEqual(runAuth('Bearer ' + t).status, 401);
+    assert.strictEqual((await runAuth('Bearer ' + t)).status, 401);
 });
+
+console.log('\n== revocacion de JWT (token_version) ==');
+await testAsync('token con tokenVersion desactualizado -> 401 (revocado por cambio de contrasena)', async () => {
+    pool.query = async () => ({ rows: [{ token_version: 3 }] }); // la BD ya avanzo (p.ej. tras change-password)
+    const t = jwt.sign({ sub: '7', tokenVersion: 2 }, process.env.JWT_SECRET, {
+        algorithm: 'HS256', expiresIn: '1h', issuer: 'lawschedule-api', audience: 'lawschedule-app' });
+    const r = await runAuth('Bearer ' + t);
+    assert.strictEqual(r.status, 401);
+    assert.strictEqual(r.nexted, false);
+});
+await testAsync('token con tokenVersion vigente -> pasa', async () => {
+    pool.query = async () => ({ rows: [{ token_version: 3 }] });
+    const t = jwt.sign({ sub: '7', tokenVersion: 3 }, process.env.JWT_SECRET, {
+        algorithm: 'HS256', expiresIn: '1h', issuer: 'lawschedule-api', audience: 'lawschedule-app' });
+    const r = await runAuth('Bearer ' + t);
+    assert.ok(r.nexted);
+    assert.strictEqual(r.req.userId, 7);
+});
+await testAsync('usuario ya no existe en BD -> 401 (no 500)', async () => {
+    pool.query = async () => ({ rows: [] });
+    const r = await runAuth('Bearer ' + validToken);
+    assert.strictEqual(r.status, 401);
+    assert.strictEqual(r.nexted, false);
+});
+
+pool.query = async () => ({ rows: [{ token_version: 0 }] }); // restaurar para el resto del archivo
 
 console.log('\n== ownership (IDOR / BOLA) ==');
 const { isPositiveInt } = require('../src/middleware/ids');
@@ -134,3 +172,7 @@ test('rechaza secreto corto o de ejemplo', () => {
 
 console.log('\n' + (fail === 0 ? 'TODOS OK' : 'HAY FALLOS') + ' — pass: ' + pass + ', fail: ' + fail);
 process.exit(fail === 0 ? 0 : 1);
+
+}
+
+main();
