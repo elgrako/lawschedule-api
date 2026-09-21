@@ -2,6 +2,7 @@ services:
   - type: web
     name: lawschedule-api
     env: node
+    region: frankfurt
     plan: free
     buildCommand: npm install
     startCommand: node src/server.js
@@ -20,4 +21,5 @@ services:
 
 databases:
   - name: lawschedule-db
+    region: frankfurt
     plan: free
