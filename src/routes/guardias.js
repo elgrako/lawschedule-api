@@ -1,8 +1,14 @@
 const router = require('express').Router();
+const path   = require('path');
+const fs     = require('fs');
 const pool   = require('../db/pool');
 const { ownsGuardia } = require('../middleware/ownership');
 const V = require('../middleware/validate');
 const L = V.LIMITS;
+const { ALLOWED, safeExt, sanitizeName, uploadDir: getUploadDir, buildUpload } = require('../lib/uploads');
+
+const uploadDir = getUploadDir();
+const upload = buildUpload(uploadDir);
 
 // OWASP API1 (BOLA): toda subruta /:guardiaId/... verifica propiedad del padre.
 // Sin esto, cualquier usuario autenticado podria leer/editar situaciones,
@@ -37,6 +43,17 @@ function mapRecurso(r) {
 
 function mapRecursoExtra(r) {
     return { id: Number(r.id), guardia_id: Number(r.guardia_id), n_expediente: r.n_expediente, admitido: r.admitido };
+}
+
+function mapDocumento(r, baseUrl) {
+    return {
+        id:             Number(r.id),
+        guardia_id:     Number(r.guardia_id),
+        nombre_archivo: r.nombre_archivo,
+        tipo_mime:      r.tipo_mime,
+        fecha_agregado: Number(r.fecha_agregado),
+        url_remota:     r.url_remota || (baseUrl + '/v1/guardias/' + r.guardia_id + '/documentos/' + r.id + '/file')
+    };
 }
 
 // ── Guardias CRUD ──────────────────────────────────────────
@@ -284,6 +301,85 @@ router.delete('/:guardiaId/recurso_extra/:id', async (req, res) => {
     if (!V.id(req.params.id)) return res.status(400).json({ error: 'Identificador invalido' });
     try {
         await pool.query('DELETE FROM recursos_extra_ordinarios WHERE id=$1 AND guardia_id=$2', [req.params.id, req.params.guardiaId]);
+        res.status(204).send();
+    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+});
+
+// ── Documentos adjuntos ────────────────────────────────────
+
+router.get('/:guardiaId/documentos', async (req, res) => {
+    try {
+        const { rows } = await pool.query(
+            'SELECT * FROM documentos_guardia WHERE guardia_id=$1 ORDER BY fecha_agregado ASC',
+            [req.params.guardiaId]
+        );
+        const base = req.protocol + '://' + req.get('host');
+        res.json(rows.map(r => mapDocumento(r, base)));
+    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+});
+
+router.post('/:guardiaId/documentos', upload.single('file'), async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'Archivo requerido' });
+    const base = req.protocol + '://' + req.get('host');
+    try {
+        const { rows } = await pool.query(
+            `INSERT INTO documentos_guardia (guardia_id, nombre_archivo, tipo_mime, url_remota)
+             VALUES ($1,$2,$3,$4) RETURNING *`,
+            [req.params.guardiaId, sanitizeName(req.file.originalname), req.file.mimetype,
+             base + '/v1/guardias/' + req.params.guardiaId + '/documentos/PENDING/file']
+        );
+        const doc = rows[0];
+        const urlRemota = base + '/v1/guardias/' + req.params.guardiaId + '/documentos/' + doc.id + '/file';
+        await pool.query('UPDATE documentos_guardia SET url_remota=$1 WHERE id=$2', [urlRemota, doc.id]);
+        const ext = safeExt(req.file.originalname, req.file.mimetype) || '.bin';
+        fs.renameSync(req.file.path, path.join(uploadDir, String(doc.id) + ext));
+        doc.url_remota = urlRemota;
+        res.status(201).json(mapDocumento(doc, base));
+    } catch (err) {
+        if (req.file) fs.unlink(req.file.path, () => {});
+        console.error(err); res.status(500).json({ error: 'Error interno' });
+    }
+});
+
+router.get('/:guardiaId/documentos/:docId/file', async (req, res) => {
+    if (!V.id(req.params.docId)) return res.status(400).json({ error: 'Identificador invalido' });
+    try {
+        const { rows } = await pool.query(
+            'SELECT * FROM documentos_guardia WHERE id=$1 AND guardia_id=$2',
+            [req.params.docId, req.params.guardiaId]
+        );
+        if (!rows.length) return res.status(404).json({ error: 'No encontrado' });
+        const doc = rows[0];
+        const ext = path.extname(String(doc.nombre_archivo || '')).toLowerCase();
+        const filePath = path.resolve(uploadDir, String(doc.id) + ext);
+        // El fichero resultante debe seguir dentro de uploadDir (defensa path traversal).
+        if (!filePath.startsWith(path.resolve(uploadDir) + path.sep)) {
+            return res.status(400).json({ error: 'Ruta invalida' });
+        }
+        if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Archivo no encontrado en disco' });
+
+        const mime = ALLOWED[doc.tipo_mime] ? doc.tipo_mime : 'application/octet-stream';
+        res.setHeader('Content-Type', mime);
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+        res.setHeader('Content-Disposition',
+            'attachment; filename="' + sanitizeName(doc.nombre_archivo) + '"');
+        res.sendFile(filePath);
+    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+});
+
+router.delete('/:guardiaId/documentos/:docId', async (req, res) => {
+    if (!V.id(req.params.docId)) return res.status(400).json({ error: 'Identificador invalido' });
+    try {
+        const { rows } = await pool.query(
+            'DELETE FROM documentos_guardia WHERE id=$1 AND guardia_id=$2 RETURNING *',
+            [req.params.docId, req.params.guardiaId]
+        );
+        if (rows.length) {
+            const ext = path.extname(String(rows[0].nombre_archivo || '')).toLowerCase();
+            const filePath = path.resolve(uploadDir, String(rows[0].id) + ext);
+            if (filePath.startsWith(path.resolve(uploadDir) + path.sep)) fs.unlink(filePath, () => {});
+        }
         res.status(204).send();
     } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
 });

@@ -129,6 +129,15 @@ CREATE TABLE IF NOT EXISTS documentos_registro (
     url_remota      TEXT
 );
 
+CREATE TABLE IF NOT EXISTS documentos_guardia (
+    id              BIGSERIAL PRIMARY KEY,
+    guardia_id      BIGINT NOT NULL REFERENCES guardias(id) ON DELETE CASCADE,
+    nombre_archivo  VARCHAR(255) NOT NULL,
+    tipo_mime       VARCHAR(100),
+    fecha_agregado  BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000,
+    url_remota      TEXT
+);
+
 CREATE TABLE IF NOT EXISTS clientes (
     id          BIGSERIAL PRIMARY KEY,
     usuario_id  BIGINT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
@@ -162,3 +171,4 @@ CREATE INDEX IF NOT EXISTS idx_apelaciones_guardia ON apelaciones_guardia(guardi
 CREATE INDEX IF NOT EXISTS idx_recursos_guardia ON recursos_guardia(guardia_id);
 CREATE INDEX IF NOT EXISTS idx_recursos_extra_guardia ON recursos_extra_ordinarios(guardia_id);
 CREATE INDEX IF NOT EXISTS idx_documentos_registro ON documentos_registro(registro_id);
+CREATE INDEX IF NOT EXISTS idx_documentos_guardia ON documentos_guardia(guardia_id);
