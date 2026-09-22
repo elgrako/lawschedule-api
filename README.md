@@ -68,6 +68,8 @@ docker compose up
 
 Incluye `render.yaml` para desplegar en [Render](https://render.com) como Blueprint (crea automáticamente el servicio web, la base de datos PostgreSQL y el `JWT_SECRET`). Las migraciones (`src/db/migrate.js`) se ejecutan automáticamente al arrancar. Más detalle en `DEPLOY.md`.
 
+Los archivos de `src/db/migrations/*.sql` se aplican una sola vez cada uno, en orden y registrados en la tabla `schema_migrations` — un cambio de esquema nuevo es un archivo nuevo (`002_algo.sql`, `003_otra_cosa.sql`, ...), nunca una edición de uno ya aplicado.
+
 ## Estructura
 
 ```

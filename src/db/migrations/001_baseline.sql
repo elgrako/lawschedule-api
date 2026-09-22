@@ -1,4 +1,7 @@
--- LawSchedule DB schema
+-- Migracion 001: snapshot congelado del schema.sql monolitico anterior
+-- (se re-aplicaba entero, idempotente, en cada boot). A partir de aqui los
+-- cambios de esquema van en archivos nuevos (002_*.sql, 003_*.sql, ...) —
+-- no editar este archivo ni el contenido de migraciones ya aplicadas.
 
 CREATE TABLE IF NOT EXISTS usuarios (
     id          BIGSERIAL PRIMARY KEY,
