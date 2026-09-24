@@ -52,14 +52,20 @@ API en `http://TU_IP:3000`
 
 ---
 
-## Opción D — Render (alternativa gratuita)
+## Opción D — Render + Neon (lo que usa producción hoy)
+
+La API corre en Render, pero la base de datos es un proyecto **Neon** externo
+(Postgres, región Frankfurt) -- no la Postgres nativa de Render. Render free
+borra su propia DB gestionada a los 90 días de inactividad; Neon free no.
 
 1. https://render.com → New Web Service → conectar repo
 2. Root Directory: `backend`
 3. Build Command: `npm install`
 4. Start Command: `node src/server.js`
 5. Add Environment Variables igual que Railway
-6. New PostgreSQL → copiar Internal Database URL como `DATABASE_URL`
+6. Crear proyecto en https://neon.tech (región Frankfurt) → copiar su
+   connection string como `DATABASE_URL` (variable manual, `sync: false` en
+   `render.yaml` -- no viene de un `databases:` de Render)
 7. Shell → `node src/db/migrate.js`
 
 ---
