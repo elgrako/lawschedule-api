@@ -26,39 +26,41 @@ router.get('/', async (req, res) => {
         );
         res.json(rows.map(mapRow));
     } catch (err) {
-        console.error(err); res.status(500).json({ error: 'Error interno' });
+        console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' });
     }
 });
 
 router.post('/', async (req, res) => {
     const b = req.body || {};
-    if (!b.diaActuacion) return res.status(400).json({ error: 'Fecha de guardia requerida' });
+    const diaActuacion = V.date(b.diaActuacion);
+    if (!diaActuacion) return res.status(400).json({ error: 'Fecha de guardia invalida' });
     try {
         const { rows } = await pool.query(
             `INSERT INTO dias_guardia (usuario_id, dia_actuacion, por_juzgado, juzgado,
              telefono_juzgado, agente_judicial, juez, observaciones)
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-            [req.userId, b.diaActuacion, V.bool(b.porJuzgado), V.str(b.juzgado, L.juzgado),
+            [req.userId, diaActuacion, V.bool(b.porJuzgado), V.str(b.juzgado, L.juzgado),
              V.str(b.telefonoJuzgado, L.telefonoJuzgado), V.str(b.agenteJudicial, L.agenteJudicial),
              V.str(b.juez, L.juez), V.str(b.observaciones, L.observaciones)]
         );
         res.status(201).json(mapRow(rows[0]));
     } catch (err) {
-        console.error(err); res.status(500).json({ error: 'Error interno' });
+        console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' });
     }
 });
 
 router.put('/:id', async (req, res) => {
     const b = req.body || {};
     if (!V.id(req.params.id)) return res.status(400).json({ error: 'Identificador invalido' });
-    if (!b.diaActuacion) return res.status(400).json({ error: 'Fecha de guardia requerida' });
+    const diaActuacion = V.date(b.diaActuacion);
+    if (!diaActuacion) return res.status(400).json({ error: 'Fecha de guardia invalida' });
     try {
         const { rows } = await pool.query(
             `UPDATE dias_guardia SET dia_actuacion=$1, por_juzgado=$2, juzgado=$3,
              telefono_juzgado=$4, agente_judicial=$5, juez=$6, observaciones=$7,
              updated_at=EXTRACT(EPOCH FROM NOW())*1000
              WHERE id=$8 AND usuario_id=$9 RETURNING *`,
-            [b.diaActuacion, V.bool(b.porJuzgado), V.str(b.juzgado, L.juzgado),
+            [diaActuacion, V.bool(b.porJuzgado), V.str(b.juzgado, L.juzgado),
              V.str(b.telefonoJuzgado, L.telefonoJuzgado), V.str(b.agenteJudicial, L.agenteJudicial),
              V.str(b.juez, L.juez), V.str(b.observaciones, L.observaciones),
              req.params.id, req.userId]
@@ -66,7 +68,7 @@ router.put('/:id', async (req, res) => {
         if (!rows.length) return res.status(404).json({ error: 'No encontrado' });
         res.json(mapRow(rows[0]));
     } catch (err) {
-        console.error(err); res.status(500).json({ error: 'Error interno' });
+        console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' });
     }
 });
 
@@ -78,7 +80,7 @@ router.delete('/:id', async (req, res) => {
         await pool.query('DELETE FROM dias_guardia WHERE id=$1 AND usuario_id=$2', [req.params.id, req.userId]);
         res.status(204).send();
     } catch (err) {
-        console.error(err); res.status(500).json({ error: 'Error interno' });
+        console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' });
     }
 });
 

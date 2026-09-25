@@ -40,4 +40,15 @@ function id(v) {
         ? Number(v) : null;
 }
 
-module.exports = { LIMITS, ESTADOS, str, bool, num, estado, id };
+// Fecha yyyy-MM-dd (formato que envia el cliente Android, DiaGuardiaDto.diaActuacion).
+// Rechaza cualquier otro formato (p.ej. epoch ms) ANTES de llegar a Postgres --
+// una columna DATE con un tipo incompatible tira un 500 generico en vez de un
+// 400 claro. Tambien rechaza fechas de calendario invalidas (2026-02-30), que
+// Date normaliza silenciosamente a otra fecha en vez de fallar.
+function date(v) {
+    if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+    const d = new Date(v + 'T00:00:00Z');
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v ? v : null;
+}
+
+module.exports = { LIMITS, ESTADOS, str, bool, num, estado, id, date };

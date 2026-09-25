@@ -24,7 +24,7 @@ router.get('/', async (req, res) => {
         );
         const base = req.protocol + '://' + req.get('host');
         res.json(rows.map(r => mapDoc(r, base)));
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+    } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.post('/', upload.single('file'), async (req, res) => {
@@ -42,7 +42,7 @@ router.post('/', upload.single('file'), async (req, res) => {
         await pool.query('UPDATE documentos_registro SET url_remota=$1 WHERE id=$2', [urlRemota, doc.id]);
         doc.url_remota = urlRemota;
         res.status(201).json(mapDoc(doc, base));
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+    } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.get('/:docId/file', async (req, res) => {
@@ -63,7 +63,7 @@ router.get('/:docId/file', async (req, res) => {
         res.setHeader('Content-Disposition',
             'attachment; filename="' + sanitizeName(doc.nombre_archivo) + '"');
         res.send(doc.contenido);
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+    } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.delete('/:docId', async (req, res) => {
@@ -71,7 +71,7 @@ router.delete('/:docId', async (req, res) => {
     try {
         await pool.query('DELETE FROM documentos_registro WHERE id=$1 AND registro_id=$2', [req.params.docId, req.params.registroId]);
         res.status(204).send();
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+    } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
 
 module.exports = router;

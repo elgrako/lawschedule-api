@@ -198,12 +198,32 @@ await testAsync('POST / sin diaActuacion -> 400', async () => {
     assert.strictEqual(res._status, 400);
 });
 
+await testAsync('POST / con diaActuacion en formato invalido (epoch ms) -> 400, sin llegar a la BD', async () => {
+    const handler = findHandler(diasGuardiaRouter, 'post', '/');
+    let calls = 0;
+    pool.query = async () => { calls++; return { rows: [] }; };
+    const req = { body: { diaActuacion: 1735689600000 }, userId: 7 };
+    const res = fakeRes();
+    await handler(req, res);
+    assert.strictEqual(res._status, 400);
+    assert.strictEqual(calls, 0, 'un formato de fecha invalido no debe llegar a Postgres (evita el 500 generico)');
+});
+
+await testAsync('POST / con diaActuacion de calendario invalida (2025-02-30) -> 400', async () => {
+    const handler = findHandler(diasGuardiaRouter, 'post', '/');
+    pool.query = async () => ({ rows: [] });
+    const req = { body: { diaActuacion: '2025-02-30' }, userId: 7 };
+    const res = fakeRes();
+    await handler(req, res);
+    assert.strictEqual(res._status, 400);
+});
+
 await testAsync('POST / valido -> 201, body mapeado (camelCase + usuario_id)', async () => {
     const handler = findHandler(diasGuardiaRouter, 'post', '/');
     pool.query = async (sql, params) => ({
         rows: [{
             id: 1,
-            dia_actuacion: 1735689600000,
+            dia_actuacion: '2025-01-01',
             por_juzgado: true,
             juzgado: 'Juzgado 1',
             telefono_juzgado: '123456789',
@@ -215,7 +235,7 @@ await testAsync('POST / valido -> 201, body mapeado (camelCase + usuario_id)', a
     });
     const req = {
         body: {
-            diaActuacion: 1735689600000, porJuzgado: true, juzgado: 'Juzgado 1',
+            diaActuacion: '2025-01-01', porJuzgado: true, juzgado: 'Juzgado 1',
             telefonoJuzgado: '123456789', agenteJudicial: 'Agente X', juez: 'Juez Y',
             observaciones: 'obs'
         },
@@ -224,7 +244,7 @@ await testAsync('POST / valido -> 201, body mapeado (camelCase + usuario_id)', a
     const res = fakeRes();
     await handler(req, res);
     assert.strictEqual(res._status, 201);
-    assert.strictEqual(res._body.diaActuacion, 1735689600000);
+    assert.strictEqual(res._body.diaActuacion, '2025-01-01');
     assert.strictEqual(res._body.porJuzgado, true);
     assert.strictEqual(res._body.juzgado, 'Juzgado 1');
     assert.strictEqual(res._body.telefonoJuzgado, '123456789');
@@ -247,7 +267,7 @@ await testAsync('GET / propio -> 200, lista mapeada filtrando por usuario_id', a
     let seenParams = null;
     pool.query = async (sql, params) => {
         seenParams = params;
-        return { rows: [{ id: 1, dia_actuacion: 1735689600000, por_juzgado: false, juzgado: null,
+        return { rows: [{ id: 1, dia_actuacion: '2025-01-01', por_juzgado: false, juzgado: null,
                            telefono_juzgado: null, agente_judicial: null, juez: null,
                            observaciones: null, usuario_id: 7 }] };
     };
@@ -255,12 +275,12 @@ await testAsync('GET / propio -> 200, lista mapeada filtrando por usuario_id', a
     const res = fakeRes();
     await handler(req, res);
     assert.deepStrictEqual(seenParams, [7]);
-    assert.strictEqual(res._body[0].diaActuacion, 1735689600000);
+    assert.strictEqual(res._body[0].diaActuacion, '2025-01-01');
 });
 
 await testAsync('PUT /:id con id no numerico -> 400', async () => {
     const handler = findHandler(diasGuardiaRouter, 'put', '/:id');
-    const req = { params: { id: 'abc' }, body: { diaActuacion: 1735689600000 }, userId: 7 };
+    const req = { params: { id: 'abc' }, body: { diaActuacion: '2025-01-01' }, userId: 7 };
     const res = fakeRes();
     await handler(req, res);
     assert.strictEqual(res._status, 400);
@@ -276,10 +296,10 @@ await testAsync('PUT /:id sin diaActuacion -> 400', async () => {
 
 await testAsync('PUT /:id propio -> 200 con datos actualizados', async () => {
     const handler = findHandler(diasGuardiaRouter, 'put', '/:id');
-    pool.query = async () => ({ rows: [{ id: 1, dia_actuacion: 1735689600000, por_juzgado: true,
+    pool.query = async () => ({ rows: [{ id: 1, dia_actuacion: '2025-01-01', por_juzgado: true,
         juzgado: 'J1', telefono_juzgado: null, agente_judicial: null, juez: null,
         observaciones: null, usuario_id: 7 }] });
-    const req = { params: { id: '1' }, body: { diaActuacion: 1735689600000, porJuzgado: true, juzgado: 'J1' }, userId: 7 };
+    const req = { params: { id: '1' }, body: { diaActuacion: '2025-01-01', porJuzgado: true, juzgado: 'J1' }, userId: 7 };
     const res = fakeRes();
     await handler(req, res);
     assert.strictEqual(res._status, undefined);
@@ -289,7 +309,7 @@ await testAsync('PUT /:id propio -> 200 con datos actualizados', async () => {
 await testAsync('PUT /:id ajeno (usuario_id no coincide) -> 404', async () => {
     const handler = findHandler(diasGuardiaRouter, 'put', '/:id');
     pool.query = async () => ({ rows: [] });
-    const req = { params: { id: '1' }, body: { diaActuacion: 1735689600000 }, userId: 7 };
+    const req = { params: { id: '1' }, body: { diaActuacion: '2025-01-01' }, userId: 7 };
     const res = fakeRes();
     await handler(req, res);
     assert.strictEqual(res._status, 404);

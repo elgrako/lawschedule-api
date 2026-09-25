@@ -351,6 +351,39 @@ await testAsync('newPassword con exactamente 3 de 4 clases (mayus+minus+digito, 
     assert.strictEqual(res._body.ok, true);
 });
 
+console.log('\n== routes: auth.js /logout ==');
+const logout = findHandler(authRouter, 'post', '/logout');
+
+await testAsync('logout valido -> 200 {ok:true}, incrementa token_version del req.userId', async () => {
+    let seenParams = null;
+    pool.query = async (sql, params) => { seenParams = params; return { rows: [] }; };
+    const req = { userId: 7 };
+    const res = fakeRes();
+    await logout(req, res);
+    assert.strictEqual(res._body.ok, true);
+    assert.deepStrictEqual(seenParams, [7]);
+});
+
+await testAsync('logout con pool.query lanzando -> 500', async () => {
+    pool.query = async () => { throw new Error('boom'); };
+    const req = { userId: 7 };
+    const res = fakeRes();
+    await logout(req, res);
+    assert.strictEqual(res._status, 500);
+});
+
+test('/auth/logout esta protegida por el middleware auth (JWT), no solo por el handler', () => {
+    const layer = authRouter.stack.find(l =>
+        l.route && l.route.path === '/logout' && l.route.methods.post
+    );
+    assert.ok(layer, 'no se encontro la ruta POST /logout');
+    assert.strictEqual(layer.route.stack.length, 2,
+        'la ruta debe tener 2 handlers en la pila: auth + el handler real');
+    const authMiddleware = require('../src/middleware/auth');
+    assert.strictEqual(layer.route.stack[0].handle, authMiddleware,
+        'logout debe pasar por el middleware auth ANTES del handler (si no, cualquiera podria bumpear el token_version de otro usuario)');
+});
+
 test('/auth/change-password esta protegida por el middleware auth (JWT), no solo por el handler', () => {
     // Los tests de arriba invocan el handler directamente con findHandler(), lo que
     // SALTA el middleware auth de la ruta. Si algun dia se quitara `auth` de

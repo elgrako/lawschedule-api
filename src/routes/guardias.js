@@ -67,7 +67,7 @@ router.get('/', async (req, res) => {
             [userId]
         );
         res.json(rows.map(mapGuardia));
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+    } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
 
 // OWASP API1 (BOLA): diaGuardiaId llega en el body, no en la URL, asi que no puede
@@ -95,7 +95,7 @@ router.post('/', async (req, res) => {
              V.str(b.observacionesAsistido, L.observacionesAsistido), req.userId]
         );
         res.status(201).json(mapGuardia(rows[0]));
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+    } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.put('/:id', async (req, res) => {
@@ -116,7 +116,7 @@ router.put('/:id', async (req, res) => {
         );
         if (!rows.length) return res.status(404).json({ error: 'No encontrado' });
         res.json(mapGuardia(rows[0]));
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+    } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.delete('/:id', async (req, res) => {
@@ -124,7 +124,7 @@ router.delete('/:id', async (req, res) => {
     try {
         await pool.query('DELETE FROM guardias WHERE id=$1 AND usuario_id=$2', [req.params.id, req.userId]);
         res.status(204).send();
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+    } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
 
 // ── Situaciones ────────────────────────────────────────────
@@ -133,7 +133,7 @@ router.get('/:guardiaId/situacion', async (req, res) => {
     try {
         const { rows } = await pool.query('SELECT * FROM situaciones_guardia WHERE guardia_id=$1', [req.params.guardiaId]);
         res.json(rows.map(mapSituacion));
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+    } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.post('/:guardiaId/situacion', async (req, res) => {
@@ -146,7 +146,7 @@ router.post('/:guardiaId/situacion', async (req, res) => {
              V.num(b.euros, { max: 1e7 }), V.bool(b.presentado), V.bool(b.validado), V.bool(b.pagado)]
         );
         res.status(201).json(mapSituacion(rows[0]));
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+    } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.put('/:guardiaId/situacion/:id', async (req, res) => {
@@ -163,7 +163,7 @@ router.put('/:guardiaId/situacion/:id', async (req, res) => {
         );
         if (!rows.length) return res.status(404).json({ error: 'No encontrado' });
         res.json(mapSituacion(rows[0]));
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+    } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.delete('/:guardiaId/situacion/:id', async (req, res) => {
@@ -171,7 +171,7 @@ router.delete('/:guardiaId/situacion/:id', async (req, res) => {
     try {
         await pool.query('DELETE FROM situaciones_guardia WHERE id=$1 AND guardia_id=$2', [req.params.id, req.params.guardiaId]);
         res.status(204).send();
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+    } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
 
 // ── Apelaciones ────────────────────────────────────────────
@@ -180,7 +180,7 @@ router.get('/:guardiaId/apelaciones', async (req, res) => {
     try {
         const { rows } = await pool.query('SELECT * FROM apelaciones_guardia WHERE guardia_id=$1', [req.params.guardiaId]);
         res.json(rows.map(mapApelacion));
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+    } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.post('/:guardiaId/apelaciones', async (req, res) => {
@@ -193,7 +193,7 @@ router.post('/:guardiaId/apelaciones', async (req, res) => {
              V.bool(b.admitido), V.bool(b.presentado), V.bool(b.sentencia)]
         );
         res.status(201).json(mapApelacion(rows[0]));
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+    } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.put('/:guardiaId/apelaciones/:id', async (req, res) => {
@@ -209,7 +209,7 @@ router.put('/:guardiaId/apelaciones/:id', async (req, res) => {
         );
         if (!rows.length) return res.status(404).json({ error: 'No encontrado' });
         res.json(mapApelacion(rows[0]));
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+    } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.delete('/:guardiaId/apelaciones/:id', async (req, res) => {
@@ -217,7 +217,7 @@ router.delete('/:guardiaId/apelaciones/:id', async (req, res) => {
     try {
         await pool.query('DELETE FROM apelaciones_guardia WHERE id=$1 AND guardia_id=$2', [req.params.id, req.params.guardiaId]);
         res.status(204).send();
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+    } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
 
 // ── Recursos ───────────────────────────────────────────────
@@ -226,7 +226,7 @@ router.get('/:guardiaId/recurso', async (req, res) => {
     try {
         const { rows } = await pool.query('SELECT * FROM recursos_guardia WHERE guardia_id=$1', [req.params.guardiaId]);
         res.json(rows.map(mapRecurso));
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+    } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.post('/:guardiaId/recurso', async (req, res) => {
@@ -237,7 +237,7 @@ router.post('/:guardiaId/recurso', async (req, res) => {
             [req.params.guardiaId, V.str(b.nExpediente || b.n_expediente, L.nExpediente), V.bool(b.resuelto)]
         );
         res.status(201).json(mapRecurso(rows[0]));
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+    } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.put('/:guardiaId/recurso/:id', async (req, res) => {
@@ -250,7 +250,7 @@ router.put('/:guardiaId/recurso/:id', async (req, res) => {
         );
         if (!rows.length) return res.status(404).json({ error: 'No encontrado' });
         res.json(mapRecurso(rows[0]));
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+    } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.delete('/:guardiaId/recurso/:id', async (req, res) => {
@@ -258,7 +258,7 @@ router.delete('/:guardiaId/recurso/:id', async (req, res) => {
     try {
         await pool.query('DELETE FROM recursos_guardia WHERE id=$1 AND guardia_id=$2', [req.params.id, req.params.guardiaId]);
         res.status(204).send();
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+    } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
 
 // ── Recursos Extraordinarios ───────────────────────────────
@@ -267,7 +267,7 @@ router.get('/:guardiaId/recurso_extra', async (req, res) => {
     try {
         const { rows } = await pool.query('SELECT * FROM recursos_extra_ordinarios WHERE guardia_id=$1', [req.params.guardiaId]);
         res.json(rows.map(mapRecursoExtra));
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+    } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.post('/:guardiaId/recurso_extra', async (req, res) => {
@@ -278,7 +278,7 @@ router.post('/:guardiaId/recurso_extra', async (req, res) => {
             [req.params.guardiaId, V.str(b.nExpediente || b.n_expediente, L.nExpediente), V.bool(b.admitido)]
         );
         res.status(201).json(mapRecursoExtra(rows[0]));
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+    } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.put('/:guardiaId/recurso_extra/:id', async (req, res) => {
@@ -291,7 +291,7 @@ router.put('/:guardiaId/recurso_extra/:id', async (req, res) => {
         );
         if (!rows.length) return res.status(404).json({ error: 'No encontrado' });
         res.json(mapRecursoExtra(rows[0]));
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+    } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.delete('/:guardiaId/recurso_extra/:id', async (req, res) => {
@@ -299,7 +299,7 @@ router.delete('/:guardiaId/recurso_extra/:id', async (req, res) => {
     try {
         await pool.query('DELETE FROM recursos_extra_ordinarios WHERE id=$1 AND guardia_id=$2', [req.params.id, req.params.guardiaId]);
         res.status(204).send();
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+    } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
 
 // ── Documentos adjuntos ────────────────────────────────────
@@ -312,7 +312,7 @@ router.get('/:guardiaId/documentos', async (req, res) => {
         );
         const base = req.protocol + '://' + req.get('host');
         res.json(rows.map(r => mapDocumento(r, base)));
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+    } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.post('/:guardiaId/documentos', upload.single('file'), async (req, res) => {
@@ -330,7 +330,7 @@ router.post('/:guardiaId/documentos', upload.single('file'), async (req, res) =>
         await pool.query('UPDATE documentos_guardia SET url_remota=$1 WHERE id=$2', [urlRemota, doc.id]);
         doc.url_remota = urlRemota;
         res.status(201).json(mapDocumento(doc, base));
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+    } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.get('/:guardiaId/documentos/:docId/file', async (req, res) => {
@@ -349,7 +349,7 @@ router.get('/:guardiaId/documentos/:docId/file', async (req, res) => {
         res.setHeader('Content-Disposition',
             'attachment; filename="' + sanitizeName(doc.nombre_archivo) + '"');
         res.send(doc.contenido);
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+    } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
 
 router.delete('/:guardiaId/documentos/:docId', async (req, res) => {
@@ -357,7 +357,7 @@ router.delete('/:guardiaId/documentos/:docId', async (req, res) => {
     try {
         await pool.query('DELETE FROM documentos_guardia WHERE id=$1 AND guardia_id=$2', [req.params.docId, req.params.guardiaId]);
         res.status(204).send();
-    } catch (err) { console.error(err); res.status(500).json({ error: 'Error interno' }); }
+    } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
 
 module.exports = router;

@@ -60,6 +60,22 @@ test('bool no acepta strings arbitrarias', () => {
     assert.strictEqual(V.bool('true'), true);
     assert.strictEqual(V.bool(true), true);
 });
+test('date acepta yyyy-MM-dd valido', () => {
+    assert.strictEqual(V.date('2025-01-01'), '2025-01-01');
+    assert.strictEqual(V.date('2024-02-29'), '2024-02-29'); // ano bisiesto real
+});
+test('date rechaza formatos que no sean yyyy-MM-dd (epoch ms, ISO con hora, etc.)', () => {
+    assert.strictEqual(V.date(1735689600000), null);
+    assert.strictEqual(V.date('2025-01-01T00:00:00Z'), null);
+    assert.strictEqual(V.date('01/01/2025'), null);
+    assert.strictEqual(V.date(''), null);
+    assert.strictEqual(V.date(null), null);
+});
+test('date rechaza fechas de calendario que no existen', () => {
+    assert.strictEqual(V.date('2025-02-30'), null); // febrero no tiene 30
+    assert.strictEqual(V.date('2025-02-29'), null); // 2025 no es bisiesto
+    assert.strictEqual(V.date('2025-13-01'), null); // mes 13
+});
 
 console.log('\n== auth middleware (JWT) ==');
 const pool = require('../src/db/pool');

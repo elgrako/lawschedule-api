@@ -191,4 +191,19 @@ router.post('/change-password', auth, async (req, res) => {
     }
 });
 
+router.post('/logout', auth, async (req, res) => {
+    // Revoca el token actual (y cualquier otro emitido antes) subiendo
+    // token_version, sin exigir la contrasena -- a diferencia de
+    // change-password, aqui SI queremos que esta sesion tambien quede
+    // invalidada (es literalmente lo que pide un logout). Antes de esto la
+    // unica forma de matar una sesion robada era cambiar la contrasena.
+    try {
+        await pool.query('UPDATE usuarios SET token_version = token_version + 1 WHERE id = $1', [req.userId]);
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('[auth/logout]', err.code || err.name);
+        res.status(500).json({ error: 'Error interno' });
+    }
+});
+
 module.exports = router;

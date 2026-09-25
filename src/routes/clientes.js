@@ -25,7 +25,7 @@ router.get('/', async (req, res) => {
         );
         res.json(rows.map(mapRow));
     } catch (err) {
-        console.error(err); res.status(500).json({ error: 'Error interno' });
+        console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' });
     }
 });
 
@@ -42,7 +42,7 @@ router.post('/', async (req, res) => {
         );
         res.status(201).json(mapRow(rows[0]));
     } catch (err) {
-        console.error(err); res.status(500).json({ error: 'Error interno' });
+        console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' });
     }
 });
 
@@ -62,7 +62,7 @@ router.put('/:id', async (req, res) => {
         if (!rows.length) return res.status(404).json({ error: 'No encontrado' });
         res.json(mapRow(rows[0]));
     } catch (err) {
-        console.error(err); res.status(500).json({ error: 'Error interno' });
+        console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' });
     }
 });
 
@@ -74,7 +74,7 @@ router.delete('/:id', async (req, res) => {
         await pool.query('DELETE FROM clientes WHERE id=$1 AND usuario_id=$2', [req.params.id, req.userId]);
         res.status(204).send();
     } catch (err) {
-        console.error(err); res.status(500).json({ error: 'Error interno' });
+        console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' });
     }
 });
 
