@@ -1,7 +1,5 @@
 const multer = require('multer');
 const path   = require('path');
-const fs     = require('fs');
-const crypto = require('crypto');
 
 // Extension y mimetype deben coincidir con la whitelist. El mimetype lo envia
 // el cliente y no es de fiar por si solo.
@@ -30,22 +28,13 @@ function sanitizeName(name) {
         .slice(0, 120) || 'documento';
 }
 
-function uploadDir() {
-    const dir = process.env.UPLOAD_DIR || './src/uploads';
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    return dir;
-}
-
-function buildUpload(dir) {
-    const storage = multer.diskStorage({
-        destination: (req, file, cb) => cb(null, dir),
-        filename:    (req, file, cb) => {
-            const ext = safeExt(file.originalname, file.mimetype) || '.bin';
-            cb(null, Date.now() + '-' + crypto.randomBytes(8).toString('hex') + ext);
-        }
-    });
+// memoryStorage: el fichero llega entero en req.file.buffer, sin tocar disco.
+// La API se aloja en Render (filesystem efimero, se borra en cada redeploy) --
+// el contenido real se persiste como BYTEA en Neon junto al resto de datos,
+// que es lo unico duradero en este despliegue.
+function buildUpload() {
     return multer({
-        storage,
+        storage: multer.memoryStorage(),
         limits: {
             fileSize: (Number(process.env.MAX_FILE_SIZE_MB) || 20) * 1024 * 1024,
             files: 1,
@@ -55,4 +44,4 @@ function buildUpload(dir) {
     });
 }
 
-module.exports = { ALLOWED, safeExt, sanitizeName, uploadDir, buildUpload };
+module.exports = { ALLOWED, safeExt, sanitizeName, buildUpload };

@@ -2,12 +2,11 @@
  * Tests de rutas (documentos.js). Ejecutar: node test/documentos.test.js
  * Sin cobertura previa. La proteccion IDOR de :registroId (ownsRegistro montado en
  * app.js) se prueba aparte en test/ownership.test.js; aqui se prueba la logica propia
- * del router (mergeParams), incluida la defensa anti path-traversal al servir/borrar
- * el fichero en disco.
+ * del router (mergeParams). El contenido del fichero se guarda como BYTEA en la
+ * propia fila (Postgres/Neon), no en disco -- Render es efimero y se borra en
+ * cada redeploy, asi que no hay ningun estado local que probar aqui.
  */
 const assert = require('assert');
-const path = require('path');
-const fs = require('fs');
 
 let pass = 0, fail = 0;
 function test(name, fn) {
@@ -37,9 +36,8 @@ function fakeRes() {
         _headers: {},
         status(c) { this._status = c; return this; },
         json(b) { this._body = b; return this; },
-        send() { return this; },
-        setHeader(k, v) { this._headers[k] = v; },
-        sendFile(p) { this._sentFile = p; }
+        send(b) { this._sentBody = b; return this; },
+        setHeader(k, v) { this._headers[k] = v; }
     };
 }
 
@@ -72,11 +70,8 @@ await testAsync('POST / sin fichero -> 400', async () => {
     assert.strictEqual(calls, 0);
 });
 
-await testAsync('POST / con fichero valido -> 201, inserta+renombra en disco y actualiza url_remota UNA sola vez', async () => {
+await testAsync('POST / con fichero valido -> 201, inserta el contenido como BYTEA y actualiza url_remota UNA sola vez', async () => {
     const handler = findHandler(documentosRouter, 'post', '/');
-    const origRename = fs.renameSync;
-    let renameArgs = null;
-    fs.renameSync = (from, to) => { renameArgs = [from, to]; };
     let updateCalls = 0;
     let insertParams = null;
     pool.query = async (sql, params) => {
@@ -84,46 +79,33 @@ await testAsync('POST / con fichero valido -> 201, inserta+renombra en disco y a
         if (/UPDATE/.test(sql)) { updateCalls++; return { rows: [] }; }
         return { rows: [] };
     };
+    const fileBuffer = Buffer.from('contenido-fake-pdf');
     const req = {
-        file: { originalname: 'contrato.pdf', mimetype: 'application/pdf', path: '/tmp/fake-upload-123' },
+        file: { originalname: 'contrato.pdf', mimetype: 'application/pdf', buffer: fileBuffer },
         params: { registroId: '5' }, protocol: 'https', get: () => 'api.example.com'
     };
     const res = fakeRes();
-    try {
-        await handler(req, res);
-        assert.strictEqual(res._status, 201);
-        assert.strictEqual(insertParams[0], '5');
-        assert.strictEqual(insertParams[1], 'contrato.pdf');
-        assert.strictEqual(insertParams[2], 'application/pdf');
-        assert.ok(renameArgs, 'debe renombrar el fichero temporal al nombre final en disco');
-        assert.strictEqual(renameArgs[0], '/tmp/fake-upload-123');
-        assert.ok(renameArgs[1].endsWith('42.pdf'), 'debe renombrar usando el id real + extension: ' + renameArgs[1]);
-        assert.ok(res._body.url_remota.includes('/v1/registros/5/documentos/42/file'));
-        assert.strictEqual(updateCalls, 1,
-            'solo debe actualizar url_remota UNA vez (regresion: antes se llamaba dos veces con los mismos parametros)');
-    } finally {
-        fs.renameSync = origRename;
-    }
+    await handler(req, res);
+    assert.strictEqual(res._status, 201);
+    assert.strictEqual(insertParams[0], '5');
+    assert.strictEqual(insertParams[1], 'contrato.pdf');
+    assert.strictEqual(insertParams[2], 'application/pdf');
+    assert.strictEqual(insertParams[4], fileBuffer, 'debe insertar el Buffer del fichero tal cual como BYTEA');
+    assert.ok(res._body.url_remota.includes('/v1/registros/5/documentos/42/file'));
+    assert.strictEqual(updateCalls, 1,
+        'solo debe actualizar url_remota UNA vez (regresion: antes se llamaba dos veces con los mismos parametros)');
 });
 
-await testAsync('POST / con error tras subir el fichero -> 500, borra el temporal', async () => {
+await testAsync('POST / con error de BD -> 500', async () => {
     const handler = findHandler(documentosRouter, 'post', '/');
-    let unlinkedPath = null;
-    const origUnlink = fs.unlink;
-    fs.unlink = (p, cb) => { unlinkedPath = p; cb(); };
     pool.query = async () => { throw new Error('boom'); };
     const req = {
-        file: { originalname: 'contrato.pdf', mimetype: 'application/pdf', path: '/tmp/fake-upload-456' },
+        file: { originalname: 'contrato.pdf', mimetype: 'application/pdf', buffer: Buffer.from('x') },
         params: { registroId: '5' }, protocol: 'https', get: () => 'api.example.com'
     };
     const res = fakeRes();
-    try {
-        await handler(req, res);
-        assert.strictEqual(res._status, 500);
-        assert.strictEqual(unlinkedPath, '/tmp/fake-upload-456', 'debe limpiar el fichero temporal si algo falla');
-    } finally {
-        fs.unlink = origUnlink;
-    }
+    await handler(req, res);
+    assert.strictEqual(res._status, 500);
 });
 
 await testAsync('GET /:docId/file con docId no numerico -> 400, sin llegar a la BD', async () => {
@@ -137,77 +119,46 @@ await testAsync('GET /:docId/file con docId no numerico -> 400, sin llegar a la 
     assert.strictEqual(calls, 0, 'no debe consultar la BD con un docId malformado');
 });
 
-await testAsync('GET /:docId/file de un registro ajeno -> 404, no sirve el fichero (IDOR)', async () => {
+await testAsync('GET /:docId/file de un registro ajeno -> 404, no sirve el contenido (IDOR)', async () => {
     const handler = findHandler(documentosRouter, 'get', '/:docId/file');
     pool.query = async () => ({ rows: [] }); // id=docId AND registro_id=registroId no matchea
     const req = { params: { registroId: '5', docId: '1' } };
     const res = fakeRes();
     await handler(req, res);
     assert.strictEqual(res._status, 404);
-    assert.strictEqual(res._sentFile, undefined);
+    assert.strictEqual(res._sentBody, undefined);
 });
 
-await testAsync('GET /:docId/file con nombre_archivo con path traversal -> 400, no sirve fuera de uploadDir', async () => {
+await testAsync('GET /:docId/file cuya fila no tiene contenido guardado -> 404', async () => {
     const handler = findHandler(documentosRouter, 'get', '/:docId/file');
-    pool.query = async () => ({ rows: [{ id: 1, registro_id: 5, nombre_archivo: '../../../../etc/passwd', tipo_mime: 'application/pdf' }] });
+    pool.query = async () => ({ rows: [{ nombre_archivo: 'contrato.pdf', tipo_mime: 'application/pdf', contenido: null }] });
     const req = { params: { registroId: '5', docId: '1' } };
     const res = fakeRes();
     await handler(req, res);
-    // path.extname('../../../../etc/passwd') === '' asi que el path resuelto sigue
-    // siendo <uploadDir>/1 (sin extension): dentro del directorio, no hay fuga real,
-    // pero verificamos que la ruta jamas escapa de uploadDir pase lo que pase.
-    assert.notStrictEqual(res._status, 500);
+    assert.strictEqual(res._status, 404);
 });
 
-await testAsync('GET /:docId/file existente -> sirve el fichero con headers de seguridad y mime whitelisteado', async () => {
+await testAsync('GET /:docId/file existente -> sirve el contenido (BYTEA) con headers de seguridad y mime whitelisteado', async () => {
     const handler = findHandler(documentosRouter, 'get', '/:docId/file');
-    pool.query = async () => ({ rows: [{ id: 1, registro_id: 5, nombre_archivo: 'contrato.pdf', tipo_mime: 'application/pdf' }] });
-    const origExists = fs.existsSync;
-    fs.existsSync = () => true;
+    const fileBuffer = Buffer.from('contenido-fake-pdf');
+    pool.query = async () => ({ rows: [{ nombre_archivo: 'contrato.pdf', tipo_mime: 'application/pdf', contenido: fileBuffer }] });
     const req = { params: { registroId: '5', docId: '1' } };
     const res = fakeRes();
-    try {
-        await handler(req, res);
-        assert.ok(res._sentFile, 'debe llamar a res.sendFile');
-        assert.ok(res._sentFile.endsWith('1.pdf'));
-        assert.strictEqual(res._headers['Content-Type'], 'application/pdf');
-        assert.strictEqual(res._headers['X-Content-Type-Options'], 'nosniff');
-        assert.ok(res._headers['Content-Disposition'].includes('contrato.pdf'));
-    } finally {
-        fs.existsSync = origExists;
-    }
+    await handler(req, res);
+    assert.strictEqual(res._sentBody, fileBuffer, 'debe enviar el Buffer tal cual');
+    assert.strictEqual(res._headers['Content-Type'], 'application/pdf');
+    assert.strictEqual(res._headers['X-Content-Type-Options'], 'nosniff');
+    assert.ok(res._headers['Content-Disposition'].includes('contrato.pdf'));
 });
 
 await testAsync('GET /:docId/file con tipo_mime fuera de whitelist -> sirve como application/octet-stream', async () => {
     const handler = findHandler(documentosRouter, 'get', '/:docId/file');
-    pool.query = async () => ({ rows: [{ id: 1, registro_id: 5, nombre_archivo: 'raro.xyz', tipo_mime: 'application/x-nunca-visto' } ] });
-    const origExists = fs.existsSync;
-    fs.existsSync = () => true;
+    pool.query = async () => ({ rows: [{ nombre_archivo: 'raro.xyz', tipo_mime: 'application/x-nunca-visto', contenido: Buffer.from('x') } ] });
     const req = { params: { registroId: '5', docId: '1' } };
     const res = fakeRes();
-    try {
-        await handler(req, res);
-        assert.strictEqual(res._headers['Content-Type'], 'application/octet-stream',
-            'un tipo_mime no whitelisteado nunca debe servirse tal cual');
-    } finally {
-        fs.existsSync = origExists;
-    }
-});
-
-await testAsync('GET /:docId/file cuyo fichero ya no existe en disco -> 404', async () => {
-    const handler = findHandler(documentosRouter, 'get', '/:docId/file');
-    pool.query = async () => ({ rows: [{ id: 1, registro_id: 5, nombre_archivo: 'contrato.pdf', tipo_mime: 'application/pdf' }] });
-    const origExists = fs.existsSync;
-    fs.existsSync = () => false;
-    const req = { params: { registroId: '5', docId: '1' } };
-    const res = fakeRes();
-    try {
-        await handler(req, res);
-        assert.strictEqual(res._status, 404);
-        assert.strictEqual(res._sentFile, undefined);
-    } finally {
-        fs.existsSync = origExists;
-    }
+    await handler(req, res);
+    assert.strictEqual(res._headers['Content-Type'], 'application/octet-stream',
+        'un tipo_mime no whitelisteado nunca debe servirse tal cual');
 });
 
 await testAsync('DELETE /:docId con docId no numerico -> 400, sin llegar a la BD', async () => {
@@ -221,24 +172,7 @@ await testAsync('DELETE /:docId con docId no numerico -> 400, sin llegar a la BD
     assert.strictEqual(calls, 0, 'no debe consultar la BD con un docId malformado');
 });
 
-await testAsync('DELETE /:docId existente -> 204 y borra el fichero correspondiente en disco', async () => {
-    const handler = findHandler(documentosRouter, 'delete', '/:docId');
-    let unlinkedPath = null;
-    const origUnlink = fs.unlink;
-    fs.unlink = (p, cb) => { unlinkedPath = p; cb(); };
-    pool.query = async () => ({ rows: [{ id: 1, registro_id: 5, nombre_archivo: 'contrato.pdf' }] });
-    const req = { params: { registroId: '5', docId: '1' } };
-    const res = fakeRes();
-    try {
-        await handler(req, res);
-        assert.strictEqual(res._status, 204);
-        assert.ok(unlinkedPath && unlinkedPath.endsWith('1.pdf'), 'debe borrar el fichero en disco correspondiente');
-    } finally {
-        fs.unlink = origUnlink;
-    }
-});
-
-await testAsync('DELETE /:docId de un registro ajeno -> 204 pero sin filas afectadas (no borra nada ajeno)', async () => {
+await testAsync('DELETE /:docId existente -> 204', async () => {
     const handler = findHandler(documentosRouter, 'delete', '/:docId');
     let seenParams = null;
     pool.query = async (sql, params) => { seenParams = params; return { rows: [] }; };
