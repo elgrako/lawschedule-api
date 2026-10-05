@@ -3,7 +3,7 @@ const pool   = require('../db/pool');
 const { ownsGuardia } = require('../middleware/ownership');
 const V = require('../middleware/validate');
 const L = V.LIMITS;
-const { ALLOWED, sanitizeName, buildUpload } = require('../lib/uploads');
+const { ALLOWED, sanitizeName, buildUpload, limitUploads } = require('../lib/uploads');
 
 const upload = buildUpload();
 
@@ -315,7 +315,7 @@ router.get('/:guardiaId/documentos', async (req, res) => {
     } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
 
-router.post('/:guardiaId/documentos', upload.single('file'), async (req, res) => {
+router.post('/:guardiaId/documentos', limitUploads, upload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Archivo requerido' });
     const base = req.protocol + '://' + req.get('host');
     try {

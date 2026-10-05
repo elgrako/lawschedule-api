@@ -47,6 +47,8 @@ function id(v) {
 // Date normaliza silenciosamente a otra fecha en vez de fallar.
 function date(v) {
     if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+    const year = Number(v.slice(0, 4));
+    if (year < 1900 || year > 2100) return null; // Postgres rechaza años fuera de rango (p.ej. 0000)
     const d = new Date(v + 'T00:00:00Z');
     return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v ? v : null;
 }

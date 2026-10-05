@@ -44,4 +44,21 @@ function buildUpload() {
     });
 }
 
-module.exports = { ALLOWED, safeExt, sanitizeName, buildUpload };
+// memoryStorage: cada subida en curso retiene su buffer (hasta 20MB) en RAM. Con
+// ~512MB en el plan free, sin tope unas pocas subidas simultaneas tumban el proceso.
+// Se limita el numero de subidas en vuelo; el resto recibe 503 y reintenta el cliente.
+const MAX_CONCURRENT_UPLOADS = Number(process.env.MAX_CONCURRENT_UPLOADS) || 4;
+let uploadsInFlight = 0;
+function limitUploads(req, res, next) {
+    if (uploadsInFlight >= MAX_CONCURRENT_UPLOADS) {
+        return res.status(503).json({ error: 'Demasiadas subidas en curso, intentalo de nuevo en unos segundos' });
+    }
+    uploadsInFlight++;
+    let released = false;
+    const release = () => { if (!released) { released = true; uploadsInFlight--; } };
+    res.on('finish', release);
+    res.on('close', release);
+    next();
+}
+
+module.exports = { ALLOWED, safeExt, sanitizeName, buildUpload, limitUploads };

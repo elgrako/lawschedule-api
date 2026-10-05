@@ -71,6 +71,12 @@ test('date rechaza formatos que no sean yyyy-MM-dd (epoch ms, ISO con hora, etc.
     assert.strictEqual(V.date(''), null);
     assert.strictEqual(V.date(null), null);
 });
+test('date rechaza años fuera de rango (0000 provocaba error de Postgres)', () => {
+    assert.strictEqual(V.date('0000-01-01'), null);
+    assert.strictEqual(V.date('1899-12-31'), null);
+    assert.strictEqual(V.date('2101-01-01'), null);
+    assert.strictEqual(V.date('2026-10-05'), '2026-10-05');
+});
 test('date rechaza fechas de calendario que no existen', () => {
     assert.strictEqual(V.date('2025-02-30'), null); // febrero no tiene 30
     assert.strictEqual(V.date('2025-02-29'), null); // 2025 no es bisiesto
