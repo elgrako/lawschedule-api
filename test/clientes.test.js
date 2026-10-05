@@ -179,12 +179,21 @@ await testAsync('DELETE /:id con id no numerico -> 400', async () => {
 await testAsync('DELETE /:id propio -> 204, filtra por id Y usuario_id', async () => {
     const handler = findHandler(clientesRouter, 'delete', '/:id');
     let seenParams = null;
-    pool.query = async (sql, params) => { seenParams = params; return {}; };
+    pool.query = async (sql, params) => { seenParams = params; return { rowCount: 1 }; };
     const req = { params: { id: '10' }, userId: 7 };
     const res = fakeRes();
     await handler(req, res);
     assert.strictEqual(res._status, 204);
     assert.deepStrictEqual(seenParams, ['10', 7]);
+});
+
+await testAsync('DELETE /:id de un cliente ajeno o inexistente -> 404 (coherente con el resto de rutas)', async () => {
+    const handler = findHandler(clientesRouter, 'delete', '/:id');
+    pool.query = async () => ({ rowCount: 0 });
+    const req = { params: { id: '10' }, userId: 7 };
+    const res = fakeRes();
+    await handler(req, res);
+    assert.strictEqual(res._status, 404);
 });
 
 await testAsync('DELETE /:id con pool.query lanzando -> 500', async () => {

@@ -71,7 +71,8 @@ router.delete('/:id', async (req, res) => {
     try {
         // ON DELETE SET NULL en registros.cliente_id: los expedientes del cliente
         // se desvinculan solos, nunca se borran junto con el cliente.
-        await pool.query('DELETE FROM clientes WHERE id=$1 AND usuario_id=$2', [req.params.id, req.userId]);
+        const { rowCount } = await pool.query('DELETE FROM clientes WHERE id=$1 AND usuario_id=$2', [req.params.id, req.userId]);
+        if (!rowCount) return res.status(404).json({ error: 'No encontrado' });
         res.status(204).send();
     } catch (err) {
         console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' });

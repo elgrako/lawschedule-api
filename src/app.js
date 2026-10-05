@@ -50,7 +50,7 @@ app.use(limiter);
 // Auth: limite estricto por IP. El bloqueo por cuenta se hace en routes/auth.js.
 const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 10,
+    max: 30,
     standardHeaders: true,
     legacyHeaders: false,
     skipSuccessfulRequests: true,
@@ -77,6 +77,13 @@ app.use((err, req, res, next) => {
     }
     if (err && err.type === 'entity.parse.failed') {
         return res.status(400).json({ error: 'JSON invalido' });
+    }
+    // Errores de subida (multer): tamano excedido -> 413, resto -> 400, nunca 500.
+    if (err && err.name === 'MulterError') {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+            return res.status(413).json({ error: 'Archivo demasiado grande (maximo 20 MB)' });
+        }
+        return res.status(400).json({ error: 'Subida de archivo no valida' });
     }
     // Nunca exponer stacktrace ni mensaje interno al cliente.
     console.error('[error]', err && (err.code || err.name || 'unknown'));
