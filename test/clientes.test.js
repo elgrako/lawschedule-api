@@ -121,7 +121,8 @@ await testAsync('POST / usa siempre req.userId, ignora usuario_id del body (anti
     const req = { body: { nombre: 'X', usuario_id: 999 }, userId: 7 };
     const res = fakeRes();
     await handler(req, res);
-    assert.strictEqual(seenParams[seenParams.length - 1], 7,
+    // usuario_id es el 7.o parametro del INSERT (indice 6); el 8.o es client_ref.
+    assert.strictEqual(seenParams[6], 7,
         'el usuario_id insertado debe ser req.userId, no el del body');
 });
 

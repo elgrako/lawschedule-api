@@ -33,13 +33,22 @@ router.post('/', async (req, res) => {
     const b = req.body || {};
     if (!V.str(b.nombre, L.nombre)) return res.status(400).json({ error: 'Nombre requerido' });
     try {
+        const ref = V.str(b.clientRef, 120) || null;
         const { rows } = await pool.query(
-            `INSERT INTO clientes (nombre, dni_nif, email, telefono, direccion, notas, usuario_id)
-             VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+            `INSERT INTO clientes (nombre, dni_nif, email, telefono, direccion, notas, usuario_id, client_ref)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+             ON CONFLICT (usuario_id, client_ref) WHERE client_ref IS NOT NULL DO NOTHING
+             RETURNING *`,
             [V.str(b.nombre, L.nombre), V.str(b.dniNif, L.dni), V.str(b.email, L.email),
              V.str(b.telefono, L.telefono), V.str(b.direccion, L.direccion),
-             V.str(b.notas, L.notas), req.userId]
+             V.str(b.notas, L.notas), req.userId, ref]
         );
+        if (!rows.length) {
+            // Reintento de una creacion ya hecha: devolver la existente, sin duplicar.
+            const { rows: prev } = await pool.query(
+                'SELECT * FROM clientes WHERE usuario_id = $1 AND client_ref = $2', [req.userId, ref]);
+            return res.status(200).json(mapRow(prev[0]));
+        }
         res.status(201).json(mapRow(rows[0]));
     } catch (err) {
         console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' });
