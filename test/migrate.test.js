@@ -40,15 +40,17 @@ await testAsync('sin migraciones pendientes -> no conecta ningun client, devuelv
         if (/SELECT name/.test(sql)) return { rows: [{ name: '001_baseline.sql' }] };
         return { rows: [] };
     };
-    let connectCalls = 0;
-    pool.connect = async () => { connectCalls++; return fakeClient(); };
+    const clients = [];
+    pool.connect = async () => { const c = fakeClient(); clients.push(c); return c; };
     fs.readdirSync = () => ['001_baseline.sql'];
     fs.readFileSync = () => 'SELECT 1;';
 
     const n = await runMigrations();
 
     assert.strictEqual(n, 0);
-    assert.strictEqual(connectCalls, 0, 'no debe abrir transaccion si no hay nada pendiente');
+    // Solo el client del advisory lock; ninguno abre transaccion.
+    assert.strictEqual(clients.length, 1);
+    assert.ok(!clients[0].queries.includes('BEGIN'), 'no debe abrir transaccion si no hay nada pendiente');
 });
 
 await testAsync('una migracion pendiente -> BEGIN, sql, INSERT, COMMIT, en ese orden, y release', async () => {
@@ -79,15 +81,15 @@ await testAsync('ignora archivos que no terminan en .sql', async () => {
         if (/SELECT name/.test(sql)) return { rows: [] };
         return { rows: [] };
     };
-    let connectCalls = 0;
-    pool.connect = async () => { connectCalls++; return fakeClient(); };
+    const clients = [];
+    pool.connect = async () => { const c = fakeClient(); clients.push(c); return c; };
     fs.readdirSync = () => ['001_baseline.sql.bak', 'README.md', '.gitkeep'];
     fs.readFileSync = () => '';
 
     const n = await runMigrations();
 
     assert.strictEqual(n, 0);
-    assert.strictEqual(connectCalls, 0);
+    assert.ok(clients.every(c => !c.queries.includes('BEGIN')), 'ningun archivo ignorado abre transaccion');
 });
 
 await testAsync('aplica en orden alfabetico (numerico por el prefijo de 3 digitos)', async () => {
@@ -104,10 +106,11 @@ await testAsync('aplica en orden alfabetico (numerico por el prefijo de 3 digito
     const n = await runMigrations();
 
     assert.strictEqual(n, 3);
-    assert.strictEqual(clients.length, 3);
-    assert.ok(clients[0].queries[1].includes('001_a.sql'));
-    assert.ok(clients[1].queries[1].includes('002_b.sql'));
-    assert.ok(clients[2].queries[1].includes('003_c.sql'));
+    // clients[0] es el lock; los siguientes son uno por migracion, en orden.
+    assert.strictEqual(clients.length, 4);
+    assert.ok(clients[1].queries[1].includes('001_a.sql'));
+    assert.ok(clients[2].queries[1].includes('002_b.sql'));
+    assert.ok(clients[3].queries[1].includes('003_c.sql'));
 });
 
 await testAsync('migracion que falla -> ROLLBACK, release, y error propagado con el nombre del archivo', async () => {

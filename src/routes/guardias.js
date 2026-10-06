@@ -122,7 +122,8 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
     if (!V.id(req.params.id)) return res.status(400).json({ error: 'Identificador invalido' });
     try {
-        await pool.query('DELETE FROM guardias WHERE id=$1 AND usuario_id=$2', [req.params.id, req.userId]);
+        const { rowCount } = await pool.query('DELETE FROM guardias WHERE id=$1 AND usuario_id=$2', [req.params.id, req.userId]);
+        if (!rowCount) return res.status(404).json({ error: 'No encontrado' });
         res.status(204).send();
     } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
@@ -169,7 +170,8 @@ router.put('/:guardiaId/situacion/:id', async (req, res) => {
 router.delete('/:guardiaId/situacion/:id', async (req, res) => {
     if (!V.id(req.params.id)) return res.status(400).json({ error: 'Identificador invalido' });
     try {
-        await pool.query('DELETE FROM situaciones_guardia WHERE id=$1 AND guardia_id=$2', [req.params.id, req.params.guardiaId]);
+        const { rowCount } = await pool.query('DELETE FROM situaciones_guardia WHERE id=$1 AND guardia_id=$2', [req.params.id, req.params.guardiaId]);
+        if (!rowCount) return res.status(404).json({ error: 'No encontrado' });
         res.status(204).send();
     } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
@@ -215,7 +217,8 @@ router.put('/:guardiaId/apelaciones/:id', async (req, res) => {
 router.delete('/:guardiaId/apelaciones/:id', async (req, res) => {
     if (!V.id(req.params.id)) return res.status(400).json({ error: 'Identificador invalido' });
     try {
-        await pool.query('DELETE FROM apelaciones_guardia WHERE id=$1 AND guardia_id=$2', [req.params.id, req.params.guardiaId]);
+        const { rowCount } = await pool.query('DELETE FROM apelaciones_guardia WHERE id=$1 AND guardia_id=$2', [req.params.id, req.params.guardiaId]);
+        if (!rowCount) return res.status(404).json({ error: 'No encontrado' });
         res.status(204).send();
     } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
@@ -256,7 +259,8 @@ router.put('/:guardiaId/recurso/:id', async (req, res) => {
 router.delete('/:guardiaId/recurso/:id', async (req, res) => {
     if (!V.id(req.params.id)) return res.status(400).json({ error: 'Identificador invalido' });
     try {
-        await pool.query('DELETE FROM recursos_guardia WHERE id=$1 AND guardia_id=$2', [req.params.id, req.params.guardiaId]);
+        const { rowCount } = await pool.query('DELETE FROM recursos_guardia WHERE id=$1 AND guardia_id=$2', [req.params.id, req.params.guardiaId]);
+        if (!rowCount) return res.status(404).json({ error: 'No encontrado' });
         res.status(204).send();
     } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
@@ -297,7 +301,8 @@ router.put('/:guardiaId/recurso_extra/:id', async (req, res) => {
 router.delete('/:guardiaId/recurso_extra/:id', async (req, res) => {
     if (!V.id(req.params.id)) return res.status(400).json({ error: 'Identificador invalido' });
     try {
-        await pool.query('DELETE FROM recursos_extra_ordinarios WHERE id=$1 AND guardia_id=$2', [req.params.id, req.params.guardiaId]);
+        const { rowCount } = await pool.query('DELETE FROM recursos_extra_ordinarios WHERE id=$1 AND guardia_id=$2', [req.params.id, req.params.guardiaId]);
+        if (!rowCount) return res.status(404).json({ error: 'No encontrado' });
         res.status(204).send();
     } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });
@@ -355,7 +360,8 @@ router.get('/:guardiaId/documentos/:docId/file', async (req, res) => {
 router.delete('/:guardiaId/documentos/:docId', async (req, res) => {
     if (!V.id(req.params.docId)) return res.status(400).json({ error: 'Identificador invalido' });
     try {
-        await pool.query('DELETE FROM documentos_guardia WHERE id=$1 AND guardia_id=$2', [req.params.docId, req.params.guardiaId]);
+        const { rowCount } = await pool.query('DELETE FROM documentos_guardia WHERE id=$1 AND guardia_id=$2', [req.params.docId, req.params.guardiaId]);
+        if (!rowCount) return res.status(404).json({ error: 'No encontrado' });
         res.status(204).send();
     } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });

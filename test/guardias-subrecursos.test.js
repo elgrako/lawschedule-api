@@ -121,7 +121,7 @@ await testAsync('PUT /:id propio de la guardia -> 200', async () => {
 await testAsync('DELETE filtra por id Y guardia_id (no borra recursos de otra guardia)', async () => {
     const handler = findHandler(guardiasRouter, 'delete', '/:guardiaId/' + sub + '/:id');
     let seenParams = null;
-    pool.query = async (sql, params) => { seenParams = params; return {}; };
+    pool.query = async (sql, params) => { seenParams = params; return { rowCount: 1 }; };
     const req = { params: { guardiaId: '5', id: '77' } };
     const res = fakeRes();
     await handler(req, res);

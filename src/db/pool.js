@@ -12,11 +12,13 @@ types.setTypeParser(1082, val => val);
 // y permite MITM sobre la conexion a la BD. Se verifica el certificado salvo
 // que se pida explicitamente lo contrario (DB_SSL_INSECURE=true).
 function sslConfig() {
-    if (process.env.NODE_ENV !== 'production') return false;
+    // TLS sale activado por defecto. Solo se desactiva fuera de produccion y con
+    // DB_SSL_DISABLE=true explicito (p.ej. Postgres local sin TLS).
+    if (process.env.NODE_ENV !== 'production' && process.env.DB_SSL_DISABLE === 'true') return false;
     if (process.env.DB_CA_CERT) {
         return { rejectUnauthorized: true, ca: process.env.DB_CA_CERT };
     }
-    if (process.env.DB_SSL_INSECURE === 'true') {
+    if (process.env.DB_SSL_INSECURE === 'true' && process.env.NODE_ENV === 'production') {
         console.warn('[db] TLS SIN verificacion de certificado (DB_SSL_INSECURE=true).');
         return { rejectUnauthorized: false };
     }

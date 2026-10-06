@@ -69,7 +69,8 @@ router.get('/:docId/file', async (req, res) => {
 router.delete('/:docId', async (req, res) => {
     if (!V.id(req.params.docId)) return res.status(400).json({ error: 'Identificador invalido' });
     try {
-        await pool.query('DELETE FROM documentos_registro WHERE id=$1 AND registro_id=$2', [req.params.docId, req.params.registroId]);
+        const { rowCount } = await pool.query('DELETE FROM documentos_registro WHERE id=$1 AND registro_id=$2', [req.params.docId, req.params.registroId]);
+        if (!rowCount) return res.status(404).json({ error: 'No encontrado' });
         res.status(204).send();
     } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });

@@ -27,7 +27,22 @@ async function appliedNames() {
 // cada boot), cada migracion corre una unica vez y queda registrada: los
 // cambios no aditivos (renombrar/borrar columnas, backfills de datos) ya no
 // necesitan guardas idempotentes escritas a mano.
+// Lock consultivo de sesion: si dos procesos arrancan a la vez (p.ej. dos instancias),
+// solo uno aplica migraciones; el otro espera y luego ve todas ya registradas.
+const MIGRATION_LOCK_ID = 724001;
+
 async function runMigrations() {
+    const lockClient = await pool.connect();
+    try {
+        await lockClient.query('SELECT pg_advisory_lock($1)', [MIGRATION_LOCK_ID]);
+        return await runMigrationsLocked();
+    } finally {
+        await lockClient.query('SELECT pg_advisory_unlock($1)', [MIGRATION_LOCK_ID]).catch(() => {});
+        lockClient.release();
+    }
+}
+
+async function runMigrationsLocked() {
     await ensureMigrationsTable();
     const applied = await appliedNames();
     const files = fs.readdirSync(MIGRATIONS_DIR)

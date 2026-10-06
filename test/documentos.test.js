@@ -175,7 +175,7 @@ await testAsync('DELETE /:docId con docId no numerico -> 400, sin llegar a la BD
 await testAsync('DELETE /:docId existente -> 204', async () => {
     const handler = findHandler(documentosRouter, 'delete', '/:docId');
     let seenParams = null;
-    pool.query = async (sql, params) => { seenParams = params; return { rows: [] }; };
+    pool.query = async (sql, params) => { seenParams = params; return { rowCount: 1 }; };
     const req = { params: { registroId: '5', docId: '1' } };
     const res = fakeRes();
     await handler(req, res);

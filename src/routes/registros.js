@@ -98,7 +98,8 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
     if (!V.id(req.params.id)) return res.status(400).json({ error: 'Identificador invalido' });
     try {
-        await pool.query('DELETE FROM registros WHERE id=$1 AND usuario_id=$2', [req.params.id, req.userId]);
+        const { rowCount } = await pool.query('DELETE FROM registros WHERE id=$1 AND usuario_id=$2', [req.params.id, req.userId]);
+        if (!rowCount) return res.status(404).json({ error: 'No encontrado' });
         res.status(204).send();
     } catch (err) {
         console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' });

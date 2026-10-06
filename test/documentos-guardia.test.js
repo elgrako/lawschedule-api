@@ -170,7 +170,7 @@ await testAsync('DELETE /:guardiaId/documentos/:docId con docId no numerico -> 4
 await testAsync('DELETE /:guardiaId/documentos/:docId existente -> 204', async () => {
     const handler = findHandler(guardiasRouter, 'delete', '/:guardiaId/documentos/:docId');
     let seenParams = null;
-    pool.query = async (sql, params) => { seenParams = params; return { rows: [] }; };
+    pool.query = async (sql, params) => { seenParams = params; return { rowCount: 1 }; };
     const req = { params: { guardiaId: '5', docId: '1' } };
     const res = fakeRes();
     await handler(req, res);
@@ -178,14 +178,14 @@ await testAsync('DELETE /:guardiaId/documentos/:docId existente -> 204', async (
     assert.deepStrictEqual(seenParams, ['1', '5']);
 });
 
-await testAsync('DELETE /:guardiaId/documentos/:docId de una guardia ajena -> 204 sin filas afectadas', async () => {
+await testAsync('DELETE /:guardiaId/documentos/:docId de una guardia ajena -> 404 sin filas afectadas', async () => {
     const handler = findHandler(guardiasRouter, 'delete', '/:guardiaId/documentos/:docId');
     let seenParams = null;
     pool.query = async (sql, params) => { seenParams = params; return { rows: [] }; };
     const req = { params: { guardiaId: '5', docId: '1' } };
     const res = fakeRes();
     await handler(req, res);
-    assert.strictEqual(res._status, 204);
+    assert.strictEqual(res._status, 404);
     assert.deepStrictEqual(seenParams, ['1', '5']);
 });
 

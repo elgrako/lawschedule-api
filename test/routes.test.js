@@ -179,7 +179,7 @@ await testAsync('DELETE /:id con id no numerico -> 400', async () => {
 await testAsync('DELETE /:id propio -> 204, filtra por id Y usuario_id', async () => {
     const handler = findHandler(guardiasRouter, 'delete', '/:id');
     let seenParams = null;
-    pool.query = async (sql, params) => { seenParams = params; return {}; };
+    pool.query = async (sql, params) => { seenParams = params; return { rowCount: 1 }; };
     const req = { params: { id: '1' }, userId: 7 };
     const res = fakeRes();
     await handler(req, res);
@@ -329,7 +329,7 @@ await testAsync('DELETE /:id con id no numerico -> 400', async () => {
 await testAsync('DELETE /:id propio -> 204, filtra por id Y usuario_id', async () => {
     const handler = findHandler(diasGuardiaRouter, 'delete', '/:id');
     let seenParams = null;
-    pool.query = async (sql, params) => { seenParams = params; return {}; };
+    pool.query = async (sql, params) => { seenParams = params; return { rowCount: 1 }; };
     const req = { params: { id: '1' }, userId: 7 };
     const res = fakeRes();
     await handler(req, res);

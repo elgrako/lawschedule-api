@@ -44,7 +44,8 @@ app.use(cors({
 
 app.use(express.json({ limit: '1mb' }));
 
-const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false });
+const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false,
+    message: { error: 'Demasiadas peticiones. Intentalo mas tarde.' } });
 app.use(limiter);
 
 // Auth: limite estricto por IP. El bloqueo por cuenta se hace en routes/auth.js.
