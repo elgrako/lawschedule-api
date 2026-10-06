@@ -120,7 +120,8 @@ await testAsync('POST / usa siempre req.userId, ignora usuario_id del body (anti
     const req = { body: { nombre: 'X', usuario_id: 999 }, userId: 7 };
     const res = fakeRes();
     await handler(req, res);
-    assert.strictEqual(seenParams[seenParams.length - 1], 7, 'el usuario_id insertado debe ser req.userId, no el del body');
+    // 14.º parametro del INSERT (el 15.º es client_ref).
+    assert.strictEqual(seenParams[13], 7, 'el usuario_id insertado debe ser req.userId, no el del body');
 });
 
 await testAsync('POST / con clienteId malformado -> se inserta como NULL, sin consultar clientes', async () => {
@@ -232,6 +233,32 @@ await testAsync('DELETE /:id con pool.query lanzando -> 500', async () => {
     const res = fakeRes();
     await handler(req, res);
     assert.strictEqual(res._status, 500);
+});
+
+await testAsync('POST / reintento con client_ref ya creado -> 200 con la fila existente, sin duplicar', async () => {
+    const handler = findHandler(registrosRouter, 'post', '/');
+    const existente = { id: 9, nombre: 'Ana', dni: null, n_expediente: 'EXP-9', euros: 0, email: null,
+        telefono: null, presentado: false, validado: false, pagado: false, n_talon: null,
+        comentarios: null, estado: 'PENDIENTE', usuario_id: 7, client_ref: 'dev:4' };
+    const sqls = [];
+    pool.query = async (sql, params) => {
+        sqls.push(sql);
+        if (/INSERT INTO registros/.test(sql)) {
+            assert.ok(/ON CONFLICT \(usuario_id, client_ref\)/.test(sql), 'el INSERT debe ser idempotente');
+            assert.strictEqual(params[params.length - 1], 'dev:4');
+            return { rows: [] }; // conflicto: ya existia
+        }
+        if (/SELECT \* FROM registros WHERE usuario_id = \$1 AND client_ref = \$2/.test(sql)) {
+            return { rows: [existente] };
+        }
+        return { rows: [] };
+    };
+    const req = { body: { nombre: 'Ana', clientRef: 'dev:4' }, userId: 7 };
+    const res = fakeRes();
+    await handler(req, res);
+    assert.strictEqual(res._status, 200);
+    assert.strictEqual(res._body.id, 9);
+    assert.strictEqual(sqls.length, 2);
 });
 
 console.log('\n' + (fail === 0 ? 'TODOS OK' : 'HAY FALLOS') + ' — pass: ' + pass + ', fail: ' + fail);

@@ -88,12 +88,20 @@ router.post('/', async (req, res) => {
         if (!(await assertOwnsDiaGuardia(diaGuardiaId, req.userId))) {
             return res.status(404).json({ error: 'Dia de guardia no encontrado' });
         }
+        const ref = V.str(b.clientRef, 120) || null;
         const { rows } = await pool.query(
-            `INSERT INTO guardias (dia_guardia_id, nombre_asistido, cobrado, observaciones_asistido, usuario_id)
-             VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+            `INSERT INTO guardias (dia_guardia_id, nombre_asistido, cobrado, observaciones_asistido, usuario_id, client_ref)
+             VALUES ($1,$2,$3,$4,$5,$6)
+             ON CONFLICT (usuario_id, client_ref) WHERE client_ref IS NOT NULL DO NOTHING
+             RETURNING *`,
             [diaGuardiaId, V.str(b.nombreAsistido, L.nombreAsistido), V.bool(b.cobrado),
-             V.str(b.observacionesAsistido, L.observacionesAsistido), req.userId]
+             V.str(b.observacionesAsistido, L.observacionesAsistido), req.userId, ref]
         );
+        if (!rows.length) {
+            const { rows: prev } = await pool.query(
+                'SELECT * FROM guardias WHERE usuario_id = $1 AND client_ref = $2', [req.userId, ref]);
+            return res.status(200).json(mapGuardia(prev[0]));
+        }
         res.status(201).json(mapGuardia(rows[0]));
     } catch (err) { console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' }); }
 });

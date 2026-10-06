@@ -35,14 +35,22 @@ router.post('/', async (req, res) => {
     const diaActuacion = V.date(b.diaActuacion);
     if (!diaActuacion) return res.status(400).json({ error: 'Fecha de guardia invalida' });
     try {
+        const ref = V.str(b.clientRef, 120) || null;
         const { rows } = await pool.query(
             `INSERT INTO dias_guardia (usuario_id, dia_actuacion, por_juzgado, juzgado,
-             telefono_juzgado, agente_judicial, juez, observaciones)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+             telefono_juzgado, agente_judicial, juez, observaciones, client_ref)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+             ON CONFLICT (usuario_id, client_ref) WHERE client_ref IS NOT NULL DO NOTHING
+             RETURNING *`,
             [req.userId, diaActuacion, V.bool(b.porJuzgado), V.str(b.juzgado, L.juzgado),
              V.str(b.telefonoJuzgado, L.telefonoJuzgado), V.str(b.agenteJudicial, L.agenteJudicial),
-             V.str(b.juez, L.juez), V.str(b.observaciones, L.observaciones)]
+             V.str(b.juez, L.juez), V.str(b.observaciones, L.observaciones), ref]
         );
+        if (!rows.length) {
+            const { rows: prev } = await pool.query(
+                'SELECT * FROM dias_guardia WHERE usuario_id = $1 AND client_ref = $2', [req.userId, ref]);
+            return res.status(200).json(mapRow(prev[0]));
+        }
         res.status(201).json(mapRow(rows[0]));
     } catch (err) {
         console.error(err.code || err.name); res.status(500).json({ error: 'Error interno' });
